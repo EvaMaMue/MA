@@ -91,7 +91,7 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, init.weigh
       # build tree of sampled instances
       if(sample.weights){
         tr <- ranger(TY~., data = TS, num.trees = 1, case.weights = weights, classification = classification, write.forest = TRUE) 
-      } else tr <- ranger(TY~., data = TS, num.trees = 1, case.weights = F, classification = classification, write.forest = TRUE) # only one tree is built, evtl mtry aus N(sqrt(M),M/50) 
+      } else tr <- ranger(TY~., data = TS, num.trees = 1, case.weights = NULL, classification = classification, write.forest = TRUE) # only one tree is built, evtl mtry aus N(sqrt(M),M/50) 
 
       forest[[l]] <- tr
       
@@ -187,7 +187,7 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, init.weigh
       # build tree of sampled instances with weights 
       if(sample.weights){
         tr <- ranger(TY~., data = TS, num.trees = 1, case.weights = weights, classification = classification, write.forest = TRUE) 
-      } else tr <- ranger(TY~., data = TS, num.trees = 1, case.weights = F, classification = classification, write.forest = TRUE) # only one tree is built, evtl mtry aus N(sqrt(M),M/50) 
+      } else tr <- ranger(TY~., data = TS, num.trees = 1, case.weights = NULL, classification = classification, write.forest = TRUE) # only one tree is built, evtl mtry aus N(sqrt(M),M/50) 
       
       # save tree in forest
       forest[[l]] <- tr
