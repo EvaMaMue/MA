@@ -1,4 +1,3 @@
-install.packages("mlr")
 library(mlr)
 
 makeRLearner.classif.brf.conv = function() {
@@ -47,6 +46,7 @@ task = makeClassifTask(id = "tutorial", data = iris, target = "Species")
 
 ## Define the learner
 lrn = makeLearner("classif.brf.conv")
+lrn = makeLearner("classif.ranger")
 
 ## Define the resampling strategy
 rdesc = makeResampleDesc(method = "CV", stratify = TRUE)
@@ -56,5 +56,5 @@ prd = predict(trn, newdata = iris)
 
 ## Do the resampling
 r = resample(learner = lrn, task = task, resampling = rdesc, show.info = FALSE)
-
+r
 

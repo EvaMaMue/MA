@@ -5,13 +5,12 @@
 # W weighting Function
 # forest: Set of Trees
 
-library(ranger,lib.loc="C:/Users/Eva-maria/Documents/Uni/Masterarbeit/R/packages")
+library(ranger)
 
-brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, init.weights = NULL, weight.treshold = 20,
-                     smoothness = 30, conv.treshold.clas = 0.01, conv.treshold.reg = 1, converge = TRUE, iqrfac = 1.5, sample.weights = TRUE){
-  
+brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.weights = TRUE, init.weights = NULL, weight.treshold = 20,
+                     smoothness = 30, conv.treshold.clas = 0.01, conv.treshold.reg = 1, converge = TRUE, iqrfac = 1.5){
+
   TS <- as.data.frame(cbind(TY,TX))
-  TS[,1] <- TY
   N <- dim(TX)[1]
   M <- dim(TX)[2]
   
@@ -47,10 +46,6 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, init.weigh
     prediction.matrix <- matrix(data = 0, nrow = N, ncol = 1)
   }
   
-  if(is.null(init.weights)){ # default is 1/N
-    init.weights <- 1/N
-  }
-  
   if(classification){
     prediction.correct <- vector(mode = "numeric", length = N)
   }
@@ -79,9 +74,11 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, init.weigh
   }
   
   # initialise weights for Training Instances of first step
-  for(i in 1:N){
-    weights[i] <- init.weights
-  } 
+  if(is.null(init.weights)){ # default is 1/N
+    init.weights <- rep(1/N, N)
+  }
+  weights <- init.weights
+
   
   
   ##################### without convergence #####################
@@ -90,8 +87,8 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, init.weigh
       
       # build tree of sampled instances
       if(sample.weights){
-        tr <- ranger(TY~., data = TS, num.trees = 1, case.weights = weights, classification = classification, write.forest = TRUE) 
-      } else tr <- ranger(TY~., data = TS, num.trees = 1, case.weights = NULL, classification = classification, write.forest = TRUE) # only one tree is built, evtl mtry aus N(sqrt(M),M/50) 
+        tr <- ranger(TY~., data = TS, num.trees = 1, case.weights = weights, write.forest = TRUE) 
+      } else tr <- ranger(TY~., data = TS, num.trees = 1, case.weights = NULL, write.forest = TRUE) # only one tree is built, evtl mtry aus N(sqrt(M),M/50) 
 
       forest[[l]] <- tr
       
@@ -103,25 +100,22 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, init.weigh
       
       if(classification){
         oob.vector[which(!is.na(prediction.matrix[,l]))] <- oob.vector[which(!is.na(prediction.matrix[,l]))] + 1
-        for(i in which(!is.na(prediction.matrix[,l]))){
+        
+        for(j in 1:length(levels(TY))){
+          vote.matrix[,j] = vote.matrix[,j] + as.numeric(prediction.matrix[,l]==levels(TY)[j] & !is.na(prediction.matrix[,l]))
+        }
+        if(leaf.weights){
           for(j in 1:length(levels(TY))){
-            if(prediction.matrix[i,l]==levels(TY)[j]){
-              vote.matrix[i,j] <- vote.matrix[i,j] + 1
-              if(leaf.weights){
-                weighted.vote.matrix[i,j] <- weighted.vote.matrix[i,j] + weights[i]
-              }
-            }
-            else vote.matrix[i,j] <- vote.matrix[i,j]
-          }
-          if(apply(vote.matrix,1,sum)[i] != 0){
-            vote.final[i] <- levels(TY)[which.max(vote.matrix[i,])]
-            if(leaf.weights){
-              weighted.vote.final[i] <- levels(TY)[which.max(weighted.vote.matrix[i,])]
-            }
+            weighted.vote.matrix[,j] <- weighted.vote.matrix[,j] + as.numeric(prediction.matrix[,l]==levels(TY)[j] & !is.na(prediction.matrix[,l])) * weights
           }
         }
-        prediction.correct[which(prediction.matrix[,l] == TY)] <- prediction.correct[which(prediction.matrix[,l] == TY)] + 1
         
+        vote.final <- levels(TY)[max.col(vote.matrix, ties.method="random")]
+        if(leaf.weights){
+          weighted.vote.final <- levels(TY)[max.col(weighted.vote.matrix, ties.method="random")]
+        }
+        
+        prediction.correct[which(prediction.matrix[,l] == TY)] <- prediction.correct[which(prediction.matrix[,l] == TY)] + 1
       }
       if(regression){
         oob.vector[which(prediction.matrix[,l]!=0)] <- oob.vector[which(prediction.matrix[,l]!=0)] + 1
@@ -186,8 +180,8 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, init.weigh
       
       # build tree of sampled instances with weights 
       if(sample.weights){
-        tr <- ranger(TY~., data = TS, num.trees = 1, case.weights = weights, classification = classification, write.forest = TRUE) 
-      } else tr <- ranger(TY~., data = TS, num.trees = 1, case.weights = NULL, classification = classification, write.forest = TRUE) # only one tree is built, evtl mtry aus N(sqrt(M),M/50) 
+        tr <- ranger(TY~., data = TS, num.trees = 1, case.weights = weights, write.forest = TRUE) 
+      } else tr <- ranger(TY~., data = TS, num.trees = 1, case.weights = NULL, write.forest = TRUE) # only one tree is built, evtl mtry aus N(sqrt(M),M/50) 
       
       # save tree in forest
       forest[[l]] <- tr
@@ -202,25 +196,24 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, init.weigh
       }
       if(classification){
         oob.vector[which(!is.na(prediction.matrix[,l]))] <- oob.vector[which(!is.na(prediction.matrix[,l]))] + 1 # wie oft war Beobachtung n OOB
-        for(i in which(!is.na(prediction.matrix[,l]))){
-          for(j in 1:length(levels(TY))){
-            if(prediction.matrix[i,l]==levels(TY)[j]){
-              vote.matrix[i,j] <- vote.matrix[i,j] + 1  # wie oft wurde Faktor j für Beobachtung i vorhergesagt
-              if(leaf.weights){
-                weighted.vote.matrix[i,j] <- weighted.vote.matrix[i,j] + weights[i]
-              }
-            } else vote.matrix[i,j] <- vote.matrix[i,j]
-          }
-          
-          if(apply(vote.matrix,1,sum)[i] != 0){
-            vote.final[i] <- levels(TY)[which.max(vote.matrix[i,])] # majority vote für vorhergesagte Klasse
-            if(leaf.weights){
-              weighted.vote.final[i] <- levels(TY)[which.max(weighted.vote.matrix[i,])]
-            }
-          }                                                         
+        
+        for(j in 1:length(levels(TY))){
+          vote.matrix[,j] = vote.matrix[,j] + as.numeric(prediction.matrix[,l]==levels(TY)[j] & !is.na(prediction.matrix[,l]))
         }
-      } 
+        if(leaf.weights){
+          for(j in 1:length(levels(TY))){
+            weighted.vote.matrix[,j] <- weighted.vote.matrix[,j] + as.numeric(prediction.matrix[,l]==levels(TY)[j] & !is.na(prediction.matrix[,l])) * weights
+          }
+        }
+        
+        vote.final <- levels(TY)[max.col(vote.matrix, ties.method="random")]
+        if(leaf.weights){
+          weighted.vote.final <- levels(TY)[max.col(weighted.vote.matrix, ties.method="random")]
+        }
+      }
       
+      
+
       if(regression){
         oob.vector[which(prediction.matrix[,l]!=0)] <- oob.vector[which(prediction.matrix[,l]!=0)] + 1
         vote.final <- apply(prediction.matrix,1,sum)/oob.vector
@@ -316,6 +309,7 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, init.weigh
     
     return(result) 
   }
+
 }
 
 
@@ -323,8 +317,10 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, init.weigh
 ### Test
 iris <- datasets::iris
 tooth = ToothGrowth
-test <- brf.conv(tooth$len,tooth[,-1], converge=T, conv.treshold.reg = 0.5, smoothness = 50, leaf.weights = T)
-test <- brf.conv(iris$Species, iris[,-5], smoothness = 100, conv.treshold.clas = 0.001, leaf.weights = T)
+test <- brf.conv(tooth$len, tooth[,-1], converge=T, conv.treshold.reg = 0.5, smoothness = 50, leaf.weights = F)
+system.time(test <- brf.conv(TY = iris$Species, TX = iris[,-5], smoothness = 100, conv.treshold.clas = 0.001, leaf.weights = T))
+system.time(test <- ranger(Species ~ ., data = iris, write.forest = TRUE))
+
 TY = iris$Species
 TX = iris[,-5]
 forest.size = 15

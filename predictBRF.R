@@ -45,4 +45,5 @@ brf.predict <- function(object, data, prob = FALSE){
   }
 }
 
-pred.test <- brf.predict(test, iris, prob = F)
+pred.test <- brf.predict(test, iris, prob = T)
+
