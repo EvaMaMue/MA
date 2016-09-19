@@ -1,5 +1,3 @@
-#library(data.table)
-
 brf.predict <- function(object, data, prob = FALSE){ 
   if(class(object)!="brf"){
     stop("object needs to be of class brf")
@@ -12,6 +10,7 @@ brf.predict <- function(object, data, prob = FALSE){
     vote.matrix <- matrix(data = 0, nrow = dim(data)[1], ncol = object$num.levels)
   }
   
+
   for(t in 1:(object$num.trees)){
     predictions.matrix <- cbind(predictions.matrix, predict(object$forest[[t]], data)$prediction)
     if(object$leaf.weights){
@@ -21,6 +20,7 @@ brf.predict <- function(object, data, prob = FALSE){
     }
   }
   
+  if (object$type == "classification") {
   if(!prob){
     if(!object$leaf.weights){
       predictions <- object$lev.names[as.numeric(apply(predictions.matrix, 1, function(x) names(which.max(table(x)))))]
@@ -43,7 +43,13 @@ brf.predict <- function(object, data, prob = FALSE){
     colnames(predictions.prob) <- object$lev.names
     return(as.matrix(predictions.prob))
   }
+  }
+  
+  if (object$type == "regression") {
+    return(apply(predictions.matrix, 1, mean))
+  }
 }
 
+pred.test <- brf.predict(test1, tooth)
 pred.test <- brf.predict(test, iris, prob = T)
 

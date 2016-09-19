@@ -1,15 +1,16 @@
-# TS Training Set divided in TX(features) and TY(Response) 
-# N Number Training Instances in T
-# M Number of Features 
-# L Number of Trees in Forest to be built
-# W weighting Function
-# forest: Set of Trees
+load("/home/probst/Benchmarking/benchmark-mlr-openml/results/clas.RData")
+load("/home/probst/Benchmarking/benchmark-mlr-openml/results/reg.RData")
+tasks = rbind(clas_small, reg_small)
+
+OMLDATASETS = tasks$did[!(tasks$did %in% c(1054, 1071, 1065))] # Cannot guess task.type from data! for these 3
+
+MEASURES = function(x) switch(x, "classif" = list(acc, ber, mmce, multiclass.au1u, multiclass.brier, logloss, timetrain), "regr" = list(mse, mae, medae, medse, timetrain))
 
 library(ranger)
 
 brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.weights = TRUE, init.weights = NULL, weight.treshold = 20,
                      smoothness = 30, conv.treshold.clas = 0.01, conv.treshold.reg = 1, converge = TRUE, iqrfac = 1.5){
-
+  
   TS <- as.data.frame(cbind(TY,TX))
   N <- dim(TX)[1]
   M <- dim(TX)[2]
@@ -33,11 +34,11 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
   
   if(converge){
     s <- smoothness
-    weight.matrix <- matrix(data = 0, nrow = N, ncol = 1)
     if(classification){
       t <- conv.treshold.clas
       oob_err <- vector(mode = "numeric")
       weighted.oob_err <- vector(mode = "numeric")
+      weight.matrix <- matrix(data = 0, nrow = N, ncol = 1)
     }
     if(regression){
       t <- conv.treshold.reg
@@ -78,7 +79,7 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
     init.weights <- rep(1/N, N)
   }
   weights <- init.weights
-
+  
   
   
   ##################### without convergence #####################
@@ -89,7 +90,7 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
       if(sample.weights){
         tr <- ranger(TY~., data = TS, num.trees = 1, case.weights = weights, write.forest = TRUE) 
       } else tr <- ranger(TY~., data = TS, num.trees = 1, case.weights = NULL, write.forest = TRUE) # only one tree is built, evtl mtry aus N(sqrt(M),M/50) 
-
+      
       forest[[l]] <- tr
       
       # predictions of current tree, to be saved in data.frame
@@ -194,7 +195,6 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
         prediction.matrix[,l] <- tr$predictions
         weight.matrix[,l] <- weights
       }
-      
       if(classification){
         oob.vector[which(!is.na(prediction.matrix[,l]))] <- oob.vector[which(!is.na(prediction.matrix[,l]))] + 1 # wie oft war Beobachtung n OOB
         
@@ -212,7 +212,9 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
           weighted.vote.final <- levels(TY)[max.col(weighted.vote.matrix, ties.method="random")]
         }
       }
-
+      
+      
+      
       if(regression){
         oob.vector[which(prediction.matrix[,l]!=0)] <- oob.vector[which(prediction.matrix[,l]!=0)] + 1
         vote.final <- apply(prediction.matrix,1,sum)/oob.vector
@@ -225,6 +227,7 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
         var <- var/oob.vector
         mse <- var + (bias)^2
       }
+      
       
       if(classification){
         # how many times has instance n been predicted correctly
@@ -293,9 +296,9 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
       if(leaf.weights){
         result$oob.error.weighted <- sum(weighted.vote.final[which(oob.vector!=0)]!=TY[which(oob.vector!=0)])/N
         result$weights <- weight.matrix
-      }
+      }      
+      result$leaf.weights <- leaf.weights
     }
-    result$leaf.weights <- leaf.weights
     if(regression){
       result$mse <- mean(mse, na.rm = T)
       result$type <- "regression"
@@ -309,17 +312,87 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
   }
 }
 
+brf.predict <- function(object, data, prob = FALSE){ 
+  if(class(object)!="brf"){
+    stop("object needs to be of class brf")
+  }
+  if(object$type == "regression" && prob){
+    stop("probability only for classification possible")
+  }
+  predictions.matrix <- vector(mode="numeric")
+  if(object$leaf.weights){
+    vote.matrix <- matrix(data = 0, nrow = dim(data)[1], ncol = object$num.levels)
+  }
+  
+  for(t in 1:(object$num.trees)){
+    predictions.matrix <- cbind(predictions.matrix, predict(object$forest[[t]], data)$prediction)
+    if(object$leaf.weights){
+      for(i in 1:object$num.levels){
+        vote.matrix[which(predictions.matrix[,t]==i),i] <- vote.matrix[which(predictions.matrix[,t]==i),i] + object$weights[which(predictions.matrix[,t]==i),t]
+      }
+    }
+  }
+  
+  if(!prob){
+    if(!object$leaf.weights){
+      predictions <- object$lev.names[as.numeric(apply(predictions.matrix, 1, function(x) names(which.max(table(x)))))]
+      predictions <- factor(predictions, levels = object$lev.names)
+    } 
+    if(object$leaf.weights){
+      predictions <- object$lev.names[as.numeric(apply(vote.matrix, 1, function(x) which.max(x)))]
+      predictions <- factor(predictions, levels = object$lev.names)
+    }
+    
+    return(predictions)
+  }
+  
+  if(prob){
+    predictions.prob <- vector("numeric")
+    for(i in 1:object$num.levels){
+      predictions.prob <- cbind(predictions.prob, apply(predictions.matrix,1, function(x) length(which(x==i))))
+    }
+    predictions.prob <- data.frame(predictions.prob/(object$num.trees))
+    colnames(predictions.prob) <- object$lev.names
+    return(as.matrix(predictions.prob))
+  }
+}
 
+library(mlr)
 
-### Test
-iris <- datasets::iris
-tooth = ToothGrowth
-test1 <- brf.conv(TY = tooth$len, TX = tooth[,-1], converge=T, conv.treshold.reg = 0.5, smoothness = 50, leaf.weights = F)
-system.time(test <- brf.conv(TY = iris$Species, TX = iris[,-5], smoothness = 100, conv.treshold.clas = 0.001, leaf.weights = T))
-system.time(test <- ranger(Species ~ ., data = iris, write.forest = TRUE))
+makeRLearner.classif.brf.conv = function() {
+  makeRLearnerClassif(
+    cl = "classif.brf.conv",
+    package = "MASS",
+    par.set = makeParamSet(
+      makeNumericLearnerParam(id = "forest.size", lower = 20, default = 300),
+      #makeNumericLearnerParam(id = "init.weights", default = FALSE),
+      makeNumericLearnerParam(id = "weight.treshold", default = 20, lower = 20),
+      makeLogicalLearnerParam(id = "leaf.weights", default = FALSE, tunable = FALSE),
+      makeLogicalLearnerParam(id = "converge", default = TRUE, tunable = FALSE),
+      makeLogicalLearnerParam(id = "sample.weights", default = TRUE, tunable = FALSE),
+      makeNumericLearnerParam(id = "smoothness", default = 30, lower = 20),
+      makeNumericLearnerParam(id = "conv.treshold", default = 0.01, upper = 0.3)
+    ),
+    properties = c("twoclass", "multiclass", "numerics", "factors", "prob"),
+    name = "Boosted Random Forest",
+    short.name = "brf.conv",
+    note = ""
+  )
+}
 
-TY = iris$Species
-TX = iris[,-5]
-forest.size = 15
-TY = tooth$len
-TX = tooth[,-1]
+trainLearner.classif.brf.conv = function(.learner, .task, .subset, .weights = NULL, ...) {
+  f = getTaskTargetNames(.task)
+  data = getTaskData(.task)
+  TY = data[, f]
+  TX = data[,colnames(data) != f]
+  brf.conv(TY = TY, TX = TX, ...)
+}
+
+predictLearner.classif.brf.conv = function(.learner, .model, .newdata, ...) {
+  if (.learner$predict.type == "response") {
+    p = brf.predict(.model$learner.model, data = .newdata, prob = FALSE) }
+  else {
+    p = brf.predict(.model$learner.model, data = .newdata, prob = TRUE)
+  }
+  return(p)
+}
