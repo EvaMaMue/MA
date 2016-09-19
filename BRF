@@ -8,7 +8,7 @@
 library(ranger,lib.loc="C:/Users/Eva-maria/Documents/Uni/Masterarbeit/R/packages")
 
 brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, init.weights = NULL, weight.treshold = 20,
-                     smoothness = 30, conv.treshold.clas = 0.01, conv.treshold.reg = 1, converge = TRUE, iqrfac = 1.5){
+                     smoothness = 30, conv.treshold.clas = 0.01, conv.treshold.reg = 1, converge = TRUE, iqrfac = 1.5, sample.weights = TRUE){
   
   TS <- as.data.frame(cbind(TY,TX))
   TS[,1] <- TY
@@ -89,7 +89,10 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, init.weigh
     for(l in 1:L){
       
       # build tree of sampled instances
-      tr <- ranger(TY~., data = TS, num.trees = 1, case.weights = weights, classification = classification, write.forest = TRUE) # only one tree is built, evtl mtry aus N(sqrt(M),M/50) 
+      if(sample.weights){
+        tr <- ranger(TY~., data = TS, num.trees = 1, case.weights = weights, classification = classification, write.forest = TRUE) 
+      } else tr <- ranger(TY~., data = TS, num.trees = 1, case.weights = F, classification = classification, write.forest = TRUE) # only one tree is built, evtl mtry aus N(sqrt(M),M/50) 
+
       forest[[l]] <- tr
       
       # predictions of current tree, to be saved in data.frame
@@ -182,7 +185,9 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, init.weigh
     while(!convergence){
       
       # build tree of sampled instances with weights 
-      tr <- ranger(TY~., data = TS, num.trees = 1, case.weights = weights, classification = classification, write.forest = TRUE) # only one tree is built, evtl mtry aus N(sqrt(M),M/50) 
+      if(sample.weights){
+        tr <- ranger(TY~., data = TS, num.trees = 1, case.weights = weights, classification = classification, write.forest = TRUE) 
+      } else tr <- ranger(TY~., data = TS, num.trees = 1, case.weights = F, classification = classification, write.forest = TRUE) # only one tree is built, evtl mtry aus N(sqrt(M),M/50) 
       
       # save tree in forest
       forest[[l]] <- tr
