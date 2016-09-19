@@ -11,6 +11,7 @@ makeRLearner.classif.brf.conv = function() {
       makeNumericLearnerParam(id = "weight.treshold", default = 20, lower = 20),
       makeLogicalLearnerParam(id = "leaf.weights", default = FALSE, tunable = FALSE),
       makeLogicalLearnerParam(id = "converge", default = TRUE, tunable = FALSE),
+      makeLogicalLearnerParam(id = "sample.weights", default = TRUE, tunable = FALSE),
       makeNumericLearnerParam(id = "smoothness", default = 30, lower = 20),
       makeNumericLearnerParam(id = "conv.treshold", default = 0.01, upper = 0.3)
     ),
