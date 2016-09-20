@@ -9,7 +9,7 @@ library(ranger)
 
 brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.weights = TRUE, init.weights = NULL, weight.treshold = 20,
                      smoothness = 30, conv.treshold.clas = 0.01, conv.treshold.reg = 1, converge = TRUE, iqrfac = 1.5){
-
+  
   TS <- as.data.frame(cbind(TY,TX))
   N <- dim(TX)[1]
   M <- dim(TX)[2]
@@ -78,7 +78,7 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
     init.weights <- rep(1/N, N)
   }
   weights <- init.weights
-
+  
   
   
   ##################### without convergence #####################
@@ -89,7 +89,7 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
       if(sample.weights){
         tr <- ranger(TY~., data = TS, num.trees = 1, case.weights = weights, write.forest = TRUE) 
       } else tr <- ranger(TY~., data = TS, num.trees = 1, case.weights = NULL, write.forest = TRUE) # only one tree is built, evtl mtry aus N(sqrt(M),M/50) 
-
+      
       forest[[l]] <- tr
       
       # predictions of current tree, to be saved in data.frame
@@ -102,7 +102,7 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
         oob.vector[which(!is.na(prediction.matrix[,l]))] <- oob.vector[which(!is.na(prediction.matrix[,l]))] + 1
         
         for(j in 1:length(levels(TY))){
-          vote.matrix[,j] = vote.matrix[,j] + as.numeric(prediction.matrix[,l]==levels(TY)[j] & !is.na(prediction.matrix[,l]))
+          vote.matrix[,j] <- vote.matrix[,j] + as.numeric(prediction.matrix[,l]==levels(TY)[j] & !is.na(prediction.matrix[,l]))
         }
         if(leaf.weights){
           for(j in 1:length(levels(TY))){
@@ -120,6 +120,7 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
       if(regression){
         oob.vector[which(prediction.matrix[,l]!=0)] <- oob.vector[which(prediction.matrix[,l]!=0)] + 1
         vote.final <- apply(prediction.matrix,1,sum)/oob.vector
+        vote.final[which(is.na(vote.final))] <- 0
         bias[which(!is.na(vote.final))] <- TY[which(!is.na(vote.final))] - vote.final[which(!is.na(vote.final))]
         var <- vector(mode = "numeric", length = N)
         for(j in 1:l){
@@ -127,6 +128,7 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
           var[oob] <- ((prediction.matrix[oob,j] - vote.final[oob])^2) + var[oob]
         }
         var <- var/oob.vector
+        var[which(is.na(var))] <- 0
         mse <- var + (bias)^2
       }
       
@@ -138,7 +140,7 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
         }
         else if(regression){
           # Ausreißer sollen nicht stärker gewichtet werden
-          weights[which(TY < (qntl.75 + iqrfac*iqr) && (qntl.25 - iqrfac*iqr))] <- mse[which(TY < (qntl.75 + iqrfac*iqr) && (qntl.25 - iqrfac*iqr))]
+          weights[which((TY < (qntl.75 + iqrfac*iqr)) == (TY > (qntl.25 - iqrfac*iqr)))] <- mse[which((TY < (qntl.75 + iqrfac*iqr)) == (TY > (qntl.25 - iqrfac*iqr)))]
         }
         # Normalisierung der Gewichte, sodass Summe = 1
         Z <- sum(weights)
@@ -212,17 +214,19 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
           weighted.vote.final <- levels(TY)[max.col(weighted.vote.matrix, ties.method="random")]
         }
       }
-
+      
       if(regression){
         oob.vector[which(prediction.matrix[,l]!=0)] <- oob.vector[which(prediction.matrix[,l]!=0)] + 1
         vote.final <- apply(prediction.matrix,1,sum)/oob.vector
-        bias[which(!is.na(vote.final))] <- TY[which(!is.na(vote.final))] - vote.final[which(!is.na(vote.final))]
+        vote.final[which(is.na(vote.final))] <- 0
+        bias[which(oob.vector!=0)] <- TY[which(oob.vector!=0)] - vote.final[which(oob.vector!=0)]
         var <- vector(mode = "numeric", length = N)
         for(j in 1:l){
           oob <- which(prediction.matrix[,j]!=0) # all instances that are out of bag
           var[oob] <- ((prediction.matrix[oob,j] - vote.final[oob])^2) + var[oob] # varianz
         }
         var <- var/oob.vector
+        var[which(is.na(var))] <- 0
         mse <- var + (bias)^2
       }
       
@@ -262,7 +266,7 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
           mmse <- mean(mse.conv[c((l-s):l)]) # Mittel des MSEs der letzten s Bäume 
           diffmse <- abs(mse.conv[c((l-s):l)] - mmse)
           mdiffmse <- mean(diffmse)
-          if(abs(mdiffmse < t)){
+          if(abs(mdiffmse) < t){
             convergence <- TRUE
           }
         }
@@ -275,7 +279,7 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
         }
         if(regression){
           # Ausreißer sollen nicht stärker gewichtet werden
-          weights[which(TY < (qntl.75 + iqrfac*iqr) && (qntl.25 - iqrfac*iqr))] <- mse[which(TY < (qntl.75 + iqrfac*iqr) && (qntl.25 - iqrfac*iqr))]
+          weights[which((TY < (qntl.75 + iqrfac*iqr)) == (TY > (qntl.25 - iqrfac*iqr)))] <- mse[which((TY < (qntl.75 + iqrfac*iqr)) == (TY > (qntl.25 - iqrfac*iqr)))]
         }
         # Normalisierung der Gewichte, sodass Summe = 1
         Z <- sum(weights)
@@ -299,6 +303,7 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
     if(regression){
       result$mse <- mean(mse, na.rm = T)
       result$type <- "regression"
+      result$mdiffmse <- mdiffmse
     }
     result$forest <- forest
     result$num.levels <- length(levels(TY))
@@ -316,7 +321,7 @@ iris <- datasets::iris
 tooth = ToothGrowth
 test1 <- brf.conv(TY = tooth$len, TX = tooth[,-1], converge=T, conv.treshold.reg = 0.5, smoothness = 50, leaf.weights = F)
 system.time(test <- brf.conv(TY = iris$Species, TX = iris[,-5], smoothness = 100, conv.treshold.clas = 0.001, leaf.weights = T))
-#system.time(test <- ranger(Species ~ ., data = iris, write.forest = TRUE))
+system.time(test <- ranger(Species ~ ., data = iris, write.forest = TRUE))
 
 TY = iris$Species
 TX = iris[,-5]
