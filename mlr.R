@@ -12,7 +12,9 @@ makeRLearner.classif.brf.conv = function() {
       makeLogicalLearnerParam(id = "converge", default = TRUE, tunable = FALSE),
       makeLogicalLearnerParam(id = "sample.weights", default = TRUE, tunable = FALSE),
       makeNumericLearnerParam(id = "smoothness", default = 30, lower = 20),
-      makeNumericLearnerParam(id = "conv.treshold", default = 0.01, upper = 0.3)
+      makeNumericLearnerParam(id = "iqrfac", default = 1.5),
+      makeNumericLearnerParam(id = "conv.treshold.reg", default = 1),
+      makeNumericLearnerParam(id = "conv.treshold.clas", default = 0.01)
     ),
     properties = c("twoclass", "multiclass", "numerics", "factors", "prob"),
     name = "Boosted Random Forest",
@@ -51,7 +53,9 @@ makeRLearner.regr.brf.conv = function() {
       makeLogicalLearnerParam(id = "converge", default = TRUE, tunable = FALSE),
       makeLogicalLearnerParam(id = "sample.weights", default = TRUE, tunable = FALSE),
       makeNumericLearnerParam(id = "smoothness", default = 30, lower = 20),
-      makeNumericLearnerParam(id = "conv.treshold", default = 0.01, upper = 0.3)
+      makeNumericLearnerParam(id = "iqrfac", default = 1.5),
+      makeNumericLearnerParam(id = "conv.treshold.reg", default = 1),
+      makeNumericLearnerParam(id = "conv.treshold.clas", default = 0.01)
     ),
     properties = c("numerics", "factors"),
     name = "Boosted Random Forest",
