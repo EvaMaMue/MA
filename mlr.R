@@ -24,7 +24,7 @@ makeRLearner.classif.brf.conv = function() {
 
 trainLearner.classif.brf.conv = function(.learner, .task, .subset, .weights = NULL, ...) {
   f = getTaskTargetNames(.task)
-  data = getTaskData(.task)
+  data = getTaskData(.task, subset = .subset)
   TY = data[, f]
   TX = data[,colnames(data) != f]
   brf.conv(TY = TY, TX = TX, ...)
@@ -62,7 +62,7 @@ makeRLearner.regr.brf.conv = function() {
 
 trainLearner.regr.brf.conv = function(.learner, .task, .subset, .weights = NULL, ...) {
   f = getTaskTargetNames(.task)
-  data = getTaskData(.task)
+  data = getTaskData(.task, subset = .subset)
   TY = data[, f]
   TX = data[,colnames(data) != f]
   brf.conv(TY = TY, TX = TX, ...)
@@ -74,36 +74,47 @@ predictLearner.regr.brf.conv = function(.learner, .model, .newdata, ...) {
 
 data(iris)
 
+# Iris Task
 ## Define the task
 task = makeClassifTask(id = "tutorial", data = iris, target = "Species")
-
 ## Define the learner
 lrn = makeLearner("classif.brf.conv")
-
 ## Define the resampling strategy
 rdesc = makeResampleDesc(method = "CV", stratify = TRUE)
-
 trn = train(lrn, task)
 prd = predict(trn, newdata = iris)
-
 ## Do the resampling
 r = resample(learner = lrn, task = task, resampling = rdesc, show.info = FALSE)
 r
+
+# Sonar Task
+## Define the task
+task = sonar.task
+sonar = getTaskData(sonar.task) 
+## Define the learner
+lrn = makeLearner("classif.brf.conv")
+## Define the resampling strategy
+rdesc = makeResampleDesc(method = "CV", stratify = TRUE)
+trn = train(lrn, task)
+prd = predict(trn, newdata = sonar)
+## Do the resampling
+r = resample(learner = lrn, task = task, resampling = rdesc, show.info = FALSE)
+r
+r2 = resample(learner = "classif.ranger", task = task, resampling = rdesc, show.info = FALSE)
+r2
+
+
 
 # Regression
 ## Define the task
 task = bh.task
 bh.data = getTaskData(bh.task)
-
 ## Define the learner
 lrn = makeLearner("regr.brf.conv")
-
 ## Define the resampling strategy
 rdesc = makeResampleDesc(method = "CV")
-
 trn = train(lrn, task)
 prd = predict(trn, newdata = bh.data)
-
 ## Do the resampling
 r = resample(learner = lrn, task = task, resampling = rdesc, show.info = FALSE)
 r

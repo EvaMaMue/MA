@@ -316,7 +316,7 @@ iris <- datasets::iris
 tooth = ToothGrowth
 test1 <- brf.conv(TY = tooth$len, TX = tooth[,-1], converge=T, conv.treshold.reg = 0.5, smoothness = 50, leaf.weights = F)
 system.time(test <- brf.conv(TY = iris$Species, TX = iris[,-5], smoothness = 100, conv.treshold.clas = 0.001, leaf.weights = T))
-system.time(test <- ranger(Species ~ ., data = iris, write.forest = TRUE))
+#system.time(test <- ranger(Species ~ ., data = iris, write.forest = TRUE))
 
 TY = iris$Species
 TX = iris[,-5]
