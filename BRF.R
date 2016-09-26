@@ -8,7 +8,7 @@
 library(ranger)
 
 brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.weights = TRUE, init.weights = NULL, weight.treshold = 20,
-                     smoothness = 30, conv.treshold.clas = 0.01, conv.treshold.reg = 1, converge = TRUE, iqrfac = 1.5){
+                     smoothness = 30, conv.treshold.clas = 0.01, conv.treshold.reg = 1, converge = TRUE, iqrfac = 1.5) {
   
   TS <- as.data.frame(cbind(TY,TX))
   N <- dim(TX)[1]
@@ -17,7 +17,9 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
   
   # classification or regression?
   classification <- is.factor(TY)
-  regression <- !is.factor(TY)
+  regression <- is.numeric(TY) || is.integer(TY)
+  if(!(classification || regression))
+    stop(paste("Target class", class(TY), "is not suitable for brf"))
   
   if(regression && leaf.weights){
     stop("leaf.weights not possible if regression, set to FALSE")
