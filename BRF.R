@@ -7,8 +7,8 @@
 
 library(ranger)
 
-brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.weights = TRUE, init.weights = NULL, weight.treshold = 20,
-                     smoothness = 30, conv.treshold.clas = 0.01, conv.treshold.reg = 1, converge = TRUE, iqrfac = 1.5) {
+brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.weights = TRUE, init.weights = NULL, weight.threshold = 20,
+                     smoothness = 200, conv.threshold.clas = 0.001, conv.threshold.reg = 1, converge = TRUE, iqrfac = 1.5) {
   
   TS <- as.data.frame(cbind(TY,TX))
   N <- dim(TX)[1]
@@ -37,12 +37,12 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
     s <- smoothness
     weight.matrix <- matrix(data = 0, nrow = N, ncol = 1)
     if(classification){
-      t <- conv.treshold.clas
+      t <- conv.threshold.clas
       oob_err <- vector(mode = "numeric")
       weighted.oob_err <- vector(mode = "numeric")
     }
     if(regression){
-      t <- conv.treshold.reg
+      t <- conv.threshold.reg
       mse.conv <- vector(mode = "numeric")
     }
     prediction.matrix <- matrix(data = 0, nrow = N, ncol = 1)
@@ -136,7 +136,7 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
       
       # weights: # trees where x is OOB and which predict correct value / # trees where x is OOB
       # only if already more than 20 trees in forest
-      if(l > weight.treshold){
+      if(l > weight.threshold){
         if(classification){
           weights[which(!is.na(prediction.matrix[,l]))] <- 1 - (prediction.correct[which(!is.na(prediction.matrix[,l]))]/oob.vector[which(!is.na(prediction.matrix[,l]))])
         }
@@ -275,7 +275,7 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
       }
       # weights: # trees where x is OOB and which predict correct value / # trees where x is OOB
       # for reliability concerns, only if already more than 20 trees in forest
-      if((l > weight.treshold) && !convergence){
+      if((l > weight.threshold) && !convergence){
         if(classification){
           weights[which(!is.na(prediction.matrix[,l]))] <- 1 - (prediction.correct[which(!is.na(prediction.matrix[,l]))]/oob.vector[which(!is.na(prediction.matrix[,l]))])
         }
@@ -321,8 +321,8 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
 ### Test
 iris <- datasets::iris
 tooth = ToothGrowth
-test1 <- brf.conv(TY = tooth$len, TX = tooth[,-1], converge=T, conv.treshold.reg = 0.5, smoothness = 50, leaf.weights = F)
-system.time(test <- brf.conv(TY = iris$Species, TX = iris[,-5], smoothness = 100, conv.treshold.clas = 0.001, leaf.weights = T))
+test1 <- brf.conv(TY = tooth$len, TX = tooth[,-1], converge=T, conv.threshold.reg = 0.5, smoothness = 50, leaf.weights = F)
+system.time(test <- brf.conv(TY = iris$Species, TX = iris[,-5], smoothness = 200, conv.threshold.clas = 0.001, leaf.weights = T))
 system.time(test <- ranger(Species ~ ., data = iris, write.forest = TRUE))
 
 TY = iris$Species

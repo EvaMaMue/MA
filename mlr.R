@@ -11,10 +11,10 @@ makeRLearner.classif.brf.conv = function() {
       makeLogicalLearnerParam(id = "leaf.weights", default = FALSE, tunable = FALSE),
       makeLogicalLearnerParam(id = "converge", default = TRUE, tunable = FALSE),
       makeLogicalLearnerParam(id = "sample.weights", default = TRUE, tunable = FALSE),
-      makeNumericLearnerParam(id = "smoothness", default = 30, lower = 20),
+      makeNumericLearnerParam(id = "smoothness", default = 200, lower = 20),
       makeNumericLearnerParam(id = "iqrfac", default = 1.5),
       makeNumericLearnerParam(id = "conv.treshold.reg", default = 1),
-      makeNumericLearnerParam(id = "conv.treshold.clas", default = 0.01)
+      makeNumericLearnerParam(id = "conv.treshold.clas", default = 0.001)
     ),
     properties = c("twoclass", "multiclass", "numerics", "factors", "prob"),
     name = "Boosted Random Forest",
