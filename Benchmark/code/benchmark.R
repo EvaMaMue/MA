@@ -29,14 +29,13 @@ addAlgorithm("eval", fun = function(job, data, instance,  ...) {
   type = getTaskType(task)
   # set here better defaults for each package?
   if(type == "classif") {
-    learners = list(makeLearner("classif.ranger", par.vals = list(num.trees = 5000), predict.type = "prob"), makeLearner("classif.brf.conv", predict.type = "prob"))
+    learners = list(makeLearner("classif.randomForest", par.vals = list(ntree = 5000), predict.type = "prob"), makeLearner("classif.brf.conv", predict.type = "prob"))
     }
   if(type == "regr"){
-    learners = list(makeLearner("regr.ranger", par.vals = list(num.trees = 5000)), makeLearner("regr.brf.conv"))
+    learners = list(makeLearner("regr.randomForest", par.vals = list(ntree = 5000)), makeLearner("regr.brf.conv"))
   }
- 
   measures = MEASURES(type)
-  rdesc = makeResampleDesc("RepCV", folds = 10, reps = 10, stratify = FALSE)
+  rdesc = makeResampleDesc("RepCV", folds = 2, reps = 10, stratify = FALSE)
   configureMlr(on.learner.error = "warn", show.learner.output = FALSE)
   bmr = benchmark(learners, task, rdesc, measures, keep.pred = FALSE, models = FALSE, show.info = TRUE)
   bmr
@@ -50,10 +49,10 @@ summarizeExperiments()
 ids = chunkIds(findNotDone(), chunk.size = 5)
 submitJobs(ids)
 # ranger braucht ca. 3 h für regression + classification
-submitJobs(1)
-submitJobs(100:110)
+submitJobs(2)
+
 #submitJobs(ids, resources = list(chunk.ncpus = 9))
 getStatus()
 getErrorMessages()
 
-res_classif_load = reduceResultsList(ids = 1, fun = function(r) as.list(r), reg = regis)
+res_classif_load = reduceResultsList(ids = 2, fun = function(r) as.list(r), reg = regis)

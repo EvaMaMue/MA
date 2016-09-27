@@ -1,3 +1,4 @@
+
 library(mlr)
 
 makeRLearner.classif.brf.conv = function() {
@@ -28,7 +29,7 @@ trainLearner.classif.brf.conv = function(.learner, .task, .subset, .weights = NU
   f = getTaskTargetNames(.task)
   data = getTaskData(.task, subset = .subset)
   TY = data[, f]
-  TX = data[,colnames(data) != f]
+  TX = data[,colnames(data) != f, drop = FALSE]
   brf.conv(TY = TY, TX = TX, ...)
 }
 
@@ -68,7 +69,7 @@ trainLearner.regr.brf.conv = function(.learner, .task, .subset, .weights = NULL,
   f = getTaskTargetNames(.task)
   data = getTaskData(.task, subset = .subset)
   TY = data[, f]
-  TX = data[,colnames(data) != f]
+  TX = data[,colnames(data) != f, drop = FALSE]
   brf.conv(TY = TY, TX = TX, ...)
 }
 
@@ -96,18 +97,22 @@ r
 task = sonar.task
 sonar = getTaskData(sonar.task) 
 ## Define the learner
-lrn = makeLearner("classif.brf.conv")
-## Define the resampling strategy
-rdesc = makeResampleDesc(method = "CV", stratify = TRUE)
+lrn = makeLearner("classif.brf.conv", predict.type = "prob")
 trn = train(lrn, task)
 prd = predict(trn, newdata = sonar)
+performance(prd, measures = list(acc, ber, mmce, multiclass.au1u, multiclass.brier, logloss))
+
+trn = train(makeLearner("classif.randomForest", predict.type = "prob"), task)
+prd2 = predict(trn, newdata = sonar)
+performance(prd2, measures = list(acc, ber, mmce, multiclass.au1u, multiclass.brier, logloss))
+
+## Define the resampling strategy
+rdesc = makeResampleDesc(method = "CV", stratify = TRUE)
 ## Do the resampling
-r = resample(learner = lrn, task = task, resampling = rdesc, show.info = FALSE)
+r = resample(learner = lrn, task = task, resampling = rdesc, show.info = FALSE, measures = measures)
 r
-r2 = resample(learner = "classif.ranger", task = task, resampling = rdesc, show.info = FALSE)
+r2 = resample(learner = makeLearner("classif.ranger", predict.type = "prob"), task = task, resampling = rdesc, show.info = FALSE, measures = measures)
 r2
-
-
 
 # Regression
 ## Define the task

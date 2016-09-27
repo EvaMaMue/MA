@@ -4,7 +4,7 @@ tasks = rbind(clas_small, reg_small)
 
 OMLDATASETS = tasks$did[!(tasks$did %in% c(1054, 1071, 1065))] # Cannot guess task.type from data! for these 3
 
-MEASURES = function(x) switch(x, "classif" = list(acc, ber, mmce, multiclass.au1u, multiclass.brier, logloss, timetrain), "regr" = list(mse, mae, medae, medse, timetrain))
+MEASURES = function(x) switch(x, "classif" = list(acc, ber, mmce, multiclass.au1u, multiclass.brier, logloss, timetrain), "regr" = list(mse, mae, medae, medse, rsq, timetrain))
 
 library(ranger)
 
@@ -317,6 +317,59 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
   }
 }
 
+brf.predict <- function(object, data, prob = FALSE){ 
+  if(class(object)!="brf"){
+    stop("object needs to be of class brf")
+  }
+  if(object$type == "regression" && prob){
+    stop("probability only for classification possible")
+  }
+  predictions.matrix <- vector(mode="numeric")
+  if(object$leaf.weights){
+    vote.matrix <- matrix(data = 0, nrow = dim(data)[1], ncol = object$num.levels)
+  }
+  
+  
+  for(t in 1:(object$num.trees)){
+    predictions.matrix <- cbind(predictions.matrix, predict(object$forest[[t]], data)$prediction)
+    if(object$leaf.weights){
+      for(i in 1:object$num.levels){
+        vote.matrix[which(predictions.matrix[,t]==i),i] <- vote.matrix[which(predictions.matrix[,t]==i),i] + object$weights[which(predictions.matrix[,t]==i),t]
+      }
+    }
+  }
+  
+  if (object$type == "classification") {
+    if(!prob){
+      if(!object$leaf.weights){
+        predictions <- object$lev.names[as.numeric(apply(predictions.matrix, 1, function(x) names(which.max(table(x)))))]
+        predictions <- factor(predictions, levels = object$lev.names)
+      } 
+      if(object$leaf.weights){
+        predictions <- object$lev.names[as.numeric(apply(vote.matrix, 1, function(x) which.max(x)))]
+        predictions <- factor(predictions, levels = object$lev.names)
+      }
+      
+      return(predictions)
+    }
+    
+    if(prob){
+      predictions.prob <- vector("numeric")
+      for(i in 1:object$num.levels){
+        predictions.prob <- cbind(predictions.prob, apply(predictions.matrix,1, function(x) length(which(x==i))))
+      }
+      predictions.prob <- data.frame(predictions.prob/(object$num.trees))
+      colnames(predictions.prob) <- object$lev.names
+      return(as.matrix(predictions.prob))
+    }
+  }
+  
+  if (object$type == "regression") {
+    return(apply(predictions.matrix, 1, mean))
+  }
+}
+
+
 library(mlr)
 
 makeRLearner.classif.brf.conv = function() {
@@ -347,7 +400,7 @@ trainLearner.classif.brf.conv = function(.learner, .task, .subset, .weights = NU
   f = getTaskTargetNames(.task)
   data = getTaskData(.task, subset = .subset)
   TY = data[, f]
-  TX = data[,colnames(data) != f]
+  TX = data[,colnames(data) != f, drop = FALSE]
   brf.conv(TY = TY, TX = TX, ...)
 }
 
@@ -387,7 +440,7 @@ trainLearner.regr.brf.conv = function(.learner, .task, .subset, .weights = NULL,
   f = getTaskTargetNames(.task)
   data = getTaskData(.task, subset = .subset)
   TY = data[, f]
-  TX = data[,colnames(data) != f]
+  TX = data[,colnames(data) != f, drop = FALSE]
   brf.conv(TY = TY, TX = TX, ...)
 }
 

@@ -316,8 +316,6 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
   }
 }
 
-
-
 ### Test
 iris <- datasets::iris
 tooth = ToothGrowth
