@@ -46,11 +46,11 @@ makeRLearner.regr.brf.conv = function() {
     cl = "regr.brf.conv",
     package = "MASS",
     par.set = makeParamSet(
-      makeNumericLearnerParam(id = "forest.size", lower = 20, default = 300),
+      makeNumericLearnerParam(id = "forest.size", lower = 20, default = 500),
       #makeNumericLearnerParam(id = "init.weights", default = FALSE),
       makeNumericLearnerParam(id = "weight.treshold", default = 20, lower = 20),
       makeLogicalLearnerParam(id = "leaf.weights", default = FALSE, tunable = FALSE),
-      makeLogicalLearnerParam(id = "converge", default = TRUE, tunable = FALSE),
+      makeLogicalLearnerParam(id = "converge", default = FALSE, tunable = FALSE),
       makeLogicalLearnerParam(id = "sample.weights", default = TRUE, tunable = FALSE),
       makeNumericLearnerParam(id = "smoothness", default = 30, lower = 20),
       makeNumericLearnerParam(id = "iqrfac", default = 1.5),

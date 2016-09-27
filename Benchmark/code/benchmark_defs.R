@@ -8,8 +8,8 @@ MEASURES = function(x) switch(x, "classif" = list(acc, ber, mmce, multiclass.au1
 
 library(ranger)
 
-brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.weights = TRUE, init.weights = NULL, weight.treshold = 20,
-                     smoothness = 30, conv.treshold.clas = 0.01, conv.treshold.reg = 1, converge = TRUE, iqrfac = 1.5){
+brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.weights = TRUE, init.weights = NULL, weight.threshold = 20,
+                     smoothness = 200, conv.threshold.clas = 0.001, conv.threshold.reg = 1, converge = TRUE, iqrfac = 1.5) {
   
   TS <- as.data.frame(cbind(TY,TX))
   N <- dim(TX)[1]
@@ -18,7 +18,9 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
   
   # classification or regression?
   classification <- is.factor(TY)
-  regression <- !is.factor(TY)
+  regression <- is.numeric(TY) || is.integer(TY)
+  if(!(classification || regression))
+    stop(paste("Target class", class(TY), "is not suitable for brf"))
   
   if(regression && leaf.weights){
     stop("leaf.weights not possible if regression, set to FALSE")
@@ -34,14 +36,14 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
   
   if(converge){
     s <- smoothness
+    weight.matrix <- matrix(data = 0, nrow = N, ncol = 1)
     if(classification){
-      t <- conv.treshold.clas
+      t <- conv.threshold.clas
       oob_err <- vector(mode = "numeric")
       weighted.oob_err <- vector(mode = "numeric")
-      weight.matrix <- matrix(data = 0, nrow = N, ncol = 1)
     }
     if(regression){
-      t <- conv.treshold.reg
+      t <- conv.threshold.reg
       mse.conv <- vector(mode = "numeric")
     }
     prediction.matrix <- matrix(data = 0, nrow = N, ncol = 1)
@@ -103,7 +105,7 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
         oob.vector[which(!is.na(prediction.matrix[,l]))] <- oob.vector[which(!is.na(prediction.matrix[,l]))] + 1
         
         for(j in 1:length(levels(TY))){
-          vote.matrix[,j] = vote.matrix[,j] + as.numeric(prediction.matrix[,l]==levels(TY)[j] & !is.na(prediction.matrix[,l]))
+          vote.matrix[,j] <- vote.matrix[,j] + as.numeric(prediction.matrix[,l]==levels(TY)[j] & !is.na(prediction.matrix[,l]))
         }
         if(leaf.weights){
           for(j in 1:length(levels(TY))){
@@ -121,6 +123,7 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
       if(regression){
         oob.vector[which(prediction.matrix[,l]!=0)] <- oob.vector[which(prediction.matrix[,l]!=0)] + 1
         vote.final <- apply(prediction.matrix,1,sum)/oob.vector
+        vote.final[which(is.na(vote.final))] <- 0
         bias[which(!is.na(vote.final))] <- TY[which(!is.na(vote.final))] - vote.final[which(!is.na(vote.final))]
         var <- vector(mode = "numeric", length = N)
         for(j in 1:l){
@@ -128,18 +131,19 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
           var[oob] <- ((prediction.matrix[oob,j] - vote.final[oob])^2) + var[oob]
         }
         var <- var/oob.vector
+        var[which(is.na(var))] <- 0
         mse <- var + (bias)^2
       }
       
       # weights: # trees where x is OOB and which predict correct value / # trees where x is OOB
       # only if already more than 20 trees in forest
-      if(l > weight.treshold){
+      if(l > weight.threshold){
         if(classification){
           weights[which(!is.na(prediction.matrix[,l]))] <- 1 - (prediction.correct[which(!is.na(prediction.matrix[,l]))]/oob.vector[which(!is.na(prediction.matrix[,l]))])
         }
         else if(regression){
           # Ausreißer sollen nicht stärker gewichtet werden
-          weights[which(TY < (qntl.75 + iqrfac*iqr) && (qntl.25 - iqrfac*iqr))] <- mse[which(TY < (qntl.75 + iqrfac*iqr) && (qntl.25 - iqrfac*iqr))]
+          weights[which((TY < (qntl.75 + iqrfac*iqr)) == (TY > (qntl.25 - iqrfac*iqr)))] <- mse[which((TY < (qntl.75 + iqrfac*iqr)) == (TY > (qntl.25 - iqrfac*iqr)))]
         }
         # Normalisierung der Gewichte, sodass Summe = 1
         Z <- sum(weights)
@@ -195,6 +199,7 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
         prediction.matrix[,l] <- tr$predictions
         weight.matrix[,l] <- weights
       }
+      
       if(classification){
         oob.vector[which(!is.na(prediction.matrix[,l]))] <- oob.vector[which(!is.na(prediction.matrix[,l]))] + 1 # wie oft war Beobachtung n OOB
         
@@ -213,21 +218,20 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
         }
       }
       
-      
-      
       if(regression){
         oob.vector[which(prediction.matrix[,l]!=0)] <- oob.vector[which(prediction.matrix[,l]!=0)] + 1
         vote.final <- apply(prediction.matrix,1,sum)/oob.vector
-        bias[which(!is.na(vote.final))] <- TY[which(!is.na(vote.final))] - vote.final[which(!is.na(vote.final))]
+        vote.final[which(is.na(vote.final))] <- 0
+        bias[which(oob.vector!=0)] <- TY[which(oob.vector!=0)] - vote.final[which(oob.vector!=0)]
         var <- vector(mode = "numeric", length = N)
         for(j in 1:l){
           oob <- which(prediction.matrix[,j]!=0) # all instances that are out of bag
           var[oob] <- ((prediction.matrix[oob,j] - vote.final[oob])^2) + var[oob] # varianz
         }
         var <- var/oob.vector
+        var[which(is.na(var))] <- 0
         mse <- var + (bias)^2
       }
-      
       
       if(classification){
         # how many times has instance n been predicted correctly
@@ -265,20 +269,20 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
           mmse <- mean(mse.conv[c((l-s):l)]) # Mittel des MSEs der letzten s Bäume 
           diffmse <- abs(mse.conv[c((l-s):l)] - mmse)
           mdiffmse <- mean(diffmse)
-          if(abs(mdiffmse < t)){
+          if(abs(mdiffmse) < t){
             convergence <- TRUE
           }
         }
       }
       # weights: # trees where x is OOB and which predict correct value / # trees where x is OOB
       # for reliability concerns, only if already more than 20 trees in forest
-      if((l > weight.treshold) && !convergence){
+      if((l > weight.threshold) && !convergence){
         if(classification){
           weights[which(!is.na(prediction.matrix[,l]))] <- 1 - (prediction.correct[which(!is.na(prediction.matrix[,l]))]/oob.vector[which(!is.na(prediction.matrix[,l]))])
         }
         if(regression){
           # Ausreißer sollen nicht stärker gewichtet werden
-          weights[which(TY < (qntl.75 + iqrfac*iqr) && (qntl.25 - iqrfac*iqr))] <- mse[which(TY < (qntl.75 + iqrfac*iqr) && (qntl.25 - iqrfac*iqr))]
+          weights[which((TY < (qntl.75 + iqrfac*iqr)) == (TY > (qntl.25 - iqrfac*iqr)))] <- mse[which((TY < (qntl.75 + iqrfac*iqr)) == (TY > (qntl.25 - iqrfac*iqr)))]
         }
         # Normalisierung der Gewichte, sodass Summe = 1
         Z <- sum(weights)
@@ -296,12 +300,13 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
       if(leaf.weights){
         result$oob.error.weighted <- sum(weighted.vote.final[which(oob.vector!=0)]!=TY[which(oob.vector!=0)])/N
         result$weights <- weight.matrix
-      }      
-      result$leaf.weights <- leaf.weights
+      }
     }
+    result$leaf.weights <- leaf.weights
     if(regression){
       result$mse <- mean(mse, na.rm = T)
       result$type <- "regression"
+      result$mdiffmse <- mdiffmse
     }
     result$forest <- forest
     result$num.levels <- length(levels(TY))
@@ -309,51 +314,6 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
     class(result) <- "brf"
     
     return(result) 
-  }
-}
-
-brf.predict <- function(object, data, prob = FALSE){ 
-  if(class(object)!="brf"){
-    stop("object needs to be of class brf")
-  }
-  if(object$type == "regression" && prob){
-    stop("probability only for classification possible")
-  }
-  predictions.matrix <- vector(mode="numeric")
-  if(object$leaf.weights){
-    vote.matrix <- matrix(data = 0, nrow = dim(data)[1], ncol = object$num.levels)
-  }
-  
-  for(t in 1:(object$num.trees)){
-    predictions.matrix <- cbind(predictions.matrix, predict(object$forest[[t]], data)$prediction)
-    if(object$leaf.weights){
-      for(i in 1:object$num.levels){
-        vote.matrix[which(predictions.matrix[,t]==i),i] <- vote.matrix[which(predictions.matrix[,t]==i),i] + object$weights[which(predictions.matrix[,t]==i),t]
-      }
-    }
-  }
-  
-  if(!prob){
-    if(!object$leaf.weights){
-      predictions <- object$lev.names[as.numeric(apply(predictions.matrix, 1, function(x) names(which.max(table(x)))))]
-      predictions <- factor(predictions, levels = object$lev.names)
-    } 
-    if(object$leaf.weights){
-      predictions <- object$lev.names[as.numeric(apply(vote.matrix, 1, function(x) which.max(x)))]
-      predictions <- factor(predictions, levels = object$lev.names)
-    }
-    
-    return(predictions)
-  }
-  
-  if(prob){
-    predictions.prob <- vector("numeric")
-    for(i in 1:object$num.levels){
-      predictions.prob <- cbind(predictions.prob, apply(predictions.matrix,1, function(x) length(which(x==i))))
-    }
-    predictions.prob <- data.frame(predictions.prob/(object$num.trees))
-    colnames(predictions.prob) <- object$lev.names
-    return(as.matrix(predictions.prob))
   }
 }
 
@@ -370,8 +330,10 @@ makeRLearner.classif.brf.conv = function() {
       makeLogicalLearnerParam(id = "leaf.weights", default = FALSE, tunable = FALSE),
       makeLogicalLearnerParam(id = "converge", default = TRUE, tunable = FALSE),
       makeLogicalLearnerParam(id = "sample.weights", default = TRUE, tunable = FALSE),
-      makeNumericLearnerParam(id = "smoothness", default = 30, lower = 20),
-      makeNumericLearnerParam(id = "conv.treshold", default = 0.01, upper = 0.3)
+      makeNumericLearnerParam(id = "smoothness", default = 200, lower = 20),
+      makeNumericLearnerParam(id = "iqrfac", default = 1.5),
+      makeNumericLearnerParam(id = "conv.treshold.reg", default = 1),
+      makeNumericLearnerParam(id = "conv.treshold.clas", default = 0.001)
     ),
     properties = c("twoclass", "multiclass", "numerics", "factors", "prob"),
     name = "Boosted Random Forest",
@@ -379,6 +341,7 @@ makeRLearner.classif.brf.conv = function() {
     note = ""
   )
 }
+
 
 trainLearner.classif.brf.conv = function(.learner, .task, .subset, .weights = NULL, ...) {
   f = getTaskTargetNames(.task)
@@ -402,14 +365,16 @@ makeRLearner.regr.brf.conv = function() {
     cl = "regr.brf.conv",
     package = "MASS",
     par.set = makeParamSet(
-      makeNumericLearnerParam(id = "forest.size", lower = 20, default = 300),
+      makeNumericLearnerParam(id = "forest.size", lower = 20, default = 500),
       #makeNumericLearnerParam(id = "init.weights", default = FALSE),
       makeNumericLearnerParam(id = "weight.treshold", default = 20, lower = 20),
       makeLogicalLearnerParam(id = "leaf.weights", default = FALSE, tunable = FALSE),
-      makeLogicalLearnerParam(id = "converge", default = TRUE, tunable = FALSE),
+      makeLogicalLearnerParam(id = "converge", default = FALSE, tunable = FALSE),
       makeLogicalLearnerParam(id = "sample.weights", default = TRUE, tunable = FALSE),
       makeNumericLearnerParam(id = "smoothness", default = 30, lower = 20),
-      makeNumericLearnerParam(id = "conv.treshold", default = 0.01, upper = 0.3)
+      makeNumericLearnerParam(id = "iqrfac", default = 1.5),
+      makeNumericLearnerParam(id = "conv.treshold.reg", default = 1),
+      makeNumericLearnerParam(id = "conv.treshold.clas", default = 0.01)
     ),
     properties = c("numerics", "factors"),
     name = "Boosted Random Forest",
