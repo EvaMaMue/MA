@@ -2,7 +2,7 @@ library(mlr)
 library(batchtools)
 library(plyr)
 
-dir = "/home/probst/Benchmarking/benchmark-mlr-openml"
+dir = "/home/probst/Abschlussarbeiten/BoostedRF/MA/Benchmark"
 setwd(paste0(dir,"/results"))
 source(paste0(dir,"/code/benchmark_defs.R"))
 
@@ -29,10 +29,10 @@ addAlgorithm("eval", fun = function(job, data, instance,  ...) {
   type = getTaskType(task)
   # set here better defaults for each package?
   if(type == "classif") {
-    learners = list(makeLearner("classif.randomForest", par.vals = list(ntree = 5000), predict.type = "prob"), makeLearner("classif.brf.conv", predict.type = "prob"))
+    learners = list(makeLearner("classif.ranger", par.vals = list(ntree = 5000), predict.type = "prob"), makeLearner("classif.brf.conv", predict.type = "prob"))
     }
   if(type == "regr"){
-    learners = list(makeLearner("regr.randomForest", par.vals = list(ntree = 5000)), makeLearner("regr.brf.conv"))
+    learners = list(makeLearner("regr.ranger", par.vals = list(ntree = 5000)), makeLearner("regr.brf.conv"))
   }
   measures = MEASURES(type)
   rdesc = makeResampleDesc("RepCV", folds = 2, reps = 10, stratify = FALSE)
