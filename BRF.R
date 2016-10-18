@@ -30,6 +30,8 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
     prediction.matrix <- matrix(data = 0, nrow = N, ncol = L)
     if(classification){
       weight.matrix <- matrix(data = 0, nrow = N, ncol = L)
+      oob_err <- vector(mode = "numeric")
+      weighted.oob_err <- vector(mode = "numeric")
     }
   }
   
@@ -113,8 +115,12 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
         }
         
         vote.final <- levels(TY)[max.col(vote.matrix, ties.method="random")]
+        oob_err[l] <- sum(vote.final[which(oob.vector!=0)]!=TY[which(oob.vector!=0)])/N
+        
         if(leaf.weights){
           weighted.vote.final <- levels(TY)[max.col(weighted.vote.matrix, ties.method="random")]
+          weighted.oob_err[l] <- sum(weighted.vote.final[which(oob.vector!=0)]!=TY[which(oob.vector!=0)])/N
+          
         }
         
         prediction.correct[which(prediction.matrix[,l] == TY)] <- prediction.correct[which(prediction.matrix[,l] == TY)] + 1
@@ -152,11 +158,11 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
     
     # prediction of the forest in case of classification
     if(classification){
-      result$oob.error <- sum(vote.final[which(oob.vector!=0)]!=TY[which(oob.vector!=0)])/N
+      result$oob.error <- oob_err
       result$type <- "classification"
       result$oob.error <- sum(vote.final[which(oob.vector!=0)]!=TY[which(oob.vector!=0)])/N
       if(leaf.weights){
-        result$weighted.oob.error <- sum(weighted.vote.final[which(oob.vector!=0)]!=TY[which(oob.vector!=0)])/N
+        result$weighted.oob.error <- weighted.oob_err
         result$weights <- weight.matrix
       }
       result$leaf.weights <- leaf.weights
@@ -294,10 +300,10 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
     result$num.trees <- l - 1
     
     if(classification){
-      result$oob.error <- sum(vote.final[which(oob.vector!=0)]!=TY[which(oob.vector!=0)])/N
+      result$oob.error <- oob_err
       result$type <- "classification"
       if(leaf.weights){
-        result$oob.error.weighted <- sum(weighted.vote.final[which(oob.vector!=0)]!=TY[which(oob.vector!=0)])/N
+        result$oob.error.weighted <- weighted.oob_err
         result$weights <- weight.matrix
       }
     }
