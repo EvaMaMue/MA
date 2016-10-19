@@ -1,0 +1,65 @@
+install.packages("devtools")
+
+devtools::install_github("openml/r")
+
+install.packages("farff")
+library(farff)
+
+options(java.parameters = "- Xmx1024m") # Should avoid java gc overhead
+library(OpenML)
+saveOMLConfig(apikey = "28a8b4d5e774a8ccd18e78e6c6c00085", arff.reader = "farff", overwrite=TRUE) # den key kannst du nach der Accounterstellung auf der Website nachschauen; falls "farff" nicht geht mache "RWeka"
+tasks = listOMLTasks()
+tasktypes = listOMLTaskTypes()
+clas = subset(tasks, task.type == "Supervised Classification") # über 1500 Klassifikationstasks
+
+# Subset von 21 Tasks/Datasets
+clas1 <- subset(clas, clas$task.id < 231 & 
+                  clas$target.feature == "class" & clas$number.of.instances.with.missing.values == 0)
+clas1 <- clas1[order(clas1$number.of.instances),]
+
+clas1 <- clas1[which(clas1$task.id != 1),]
+
+clas2 <- subset(clas1, clas1$number.of.instances %in% c(150,270,336,625,768,2000,1000000))
+clas2 <- clas2[c(1:5,7:12,14:16,18,27),]
+clas2 <- rbind(clas2, clas1[which(clas1$number.of.instances %in% c(10992, 45312, 295245, 829201)),])
+clas2 <- clas2[order(clas2$number.of.instances),]
+
+tab <- clas2[,c(1,3,4,18,20:23)]
+
+library(randomForestSRC)
+
+#Task ID festhalten
+
+dataID <- clas2$data.id
+for(i in 1:20){
+  runRF = matrix(NA, 50, 1500) 
+  runBRF = matrix(NA, 50, 1500)
+  stoptree <- vector("numeric", length = 50)
+  set.seed(105)
+  for(j in 1:50){
+    print(c(i,j))
+    task <- getOMLDataSet(data.id = dataID[2], verbosity = 0)
+    task <- task$data
+    BRF = brf.conv.stop(task$class, task[,-which(colnames(task)=="class")], forest.size = 2000, converge = F)
+    runRF[j,] = randomForestSRC(data = task, task$class~., ntree = 2000)$err.rate[,1]
+    runBRF[j,] = BRF$oob.error
+    stoptree[j] = BRF$stoptree
+  }
+  runsRF = apply(runRF, 2, mean)
+  runsBRF = apply(runBRF, 2, mean)
+  stoptree = mean(stoptree, na.rm = T)
+  plot(runsRF, ylim=c(min(runsBRF,runsRF),max(runsBRF,runsRF)), type = "l", col = "black", lwd = 1, xlab = "Anzahl Bäume", ylab = "OOB Fehlerrate", main = i)
+  lines(runsBRF, col = "blue", lwd = 1)
+  legend("topright", legend = c("RF", "BRF"), col = c("black", "blue"), lty = 1)
+  abline(v=stoptree, col = "red")
+  legend("topright", legend = c("RF", "BRF"), col = c("black", "blue"), lty = 1)
+}
+
+## Tabelle für Latex
+
+> tab <- clas2[,c(1,3,4,21:23)]
+> colnames(tab) <- c("TaskID","DataID","Name","Klassen","Variablen","Beobachtungen")
+> rownames(tab) <- c(1:20)
+> tab <- tab[,c(1,2,4,5,6)]
+library(xtable)
+xtable(tab)
