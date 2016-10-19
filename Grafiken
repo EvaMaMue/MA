@@ -38,7 +38,7 @@ for(i in 1:20){
   set.seed(105)
   for(j in 1:50){
     print(c(i,j))
-    task <- getOMLDataSet(data.id = dataID[2], verbosity = 0)
+    task <- getOMLDataSet(data.id = dataID[i], verbosity = 0)
     task <- task$data
     BRF = brf.conv.stop(task$class, task[,-which(colnames(task)=="class")], forest.size = 2000, converge = F)
     runRF[j,] = randomForestSRC(data = task, task$class~., ntree = 2000)$err.rate[,1]
