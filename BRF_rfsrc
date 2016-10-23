@@ -87,8 +87,8 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
       
       # build tree of sampled instances
       if(sample.weights){
-        tr <- rfsrc(TY~., data = TS, ntree = 1, case.wt = weights, forest = TRUE) 
-      } else tr <- rfsrc(TY~., data = TS, ntree = 1, case.wt = NULL, forest = TRUE) # only one tree is built, evtl mtry aus N(sqrt(M),M/50) 
+        tr <- rfsrc(TY~., data = TS, ntree = 1, case.wt = weights, forest = TRUE, membership = T) 
+      } else tr <- rfsrc(TY~., data = TS, ntree = 1, case.wt = NULL, forest = TRUE, membership = T) # only one tree is built, evtl mtry aus N(sqrt(M),M/50) 
       
       # save tree in forest
       
@@ -98,10 +98,12 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
       # predictions of current tree, to be saved in data.frame
       if(classification){
         prediction.matrix[,l] <- tr$class.oob
+        prediction.matrix[which(tr$inbag!=0),l] <- NA
       }
       
       if(regression){
         prediction.matrix[,l] <- tr$predicted.oob
+        prediction.matrix[which(tr$inbag!=0),l] <- 0
       }
       
       
@@ -222,9 +224,11 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
         # predictions of current tree, to be saved in data.frame
         if(l > 1){
           prediction.matrix <- cbind(prediction.matrix, tr$class.oob)
+          prediction.matrix[which(tr$inbag==1),l] <- NA
           weight.matrix <- cbind(weight.matrix, weights)
         } else{
           prediction.matrix[,l] <- tr$class.oob
+          prediction.matrix[which(tr$inbag==1),l] <- NA
           weight.matrix[,l] <- weights
         }
         oob.vector[which(!is.na(prediction.matrix[,l]))] <- oob.vector[which(!is.na(prediction.matrix[,l]))] + 1 # wie oft war Beobachtung n OOB
@@ -248,9 +252,11 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
         # predictions of current tree, to be saved in data.frame
         if(l > 1){
           prediction.matrix <- cbind(prediction.matrix, tr$predicted.oob)
+          prediction.matrix[which(tr$inbag==1),l] <- 0
           weight.matrix <- cbind(weight.matrix, weights)
         } else{
           prediction.matrix[,l] <- tr$predicted.oob
+          prediction.matrix[which(tr$inbag==1),l] <- 0
           weight.matrix[,l] <- weights
         }
         oob.vector[which(prediction.matrix[,l]!=0)] <- oob.vector[which(prediction.matrix[,l]!=0)] + 1
@@ -350,3 +356,4 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
     return(result) 
   }
 }
+
