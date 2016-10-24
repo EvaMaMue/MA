@@ -1,7 +1,7 @@
 library(randomForestSRC)
 
 brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.weights = TRUE, init.weights = NULL, weight.threshold = 20,
-                     smoothness = 200, conv.threshold.clas = 0.001, conv.threshold.reg = 1, converge = TRUE, iqrfac = 1.5) {
+                     smoothness = 200, conv.threshold.clas = 0.001, conv.threshold.reg = 1, converge = TRUE, iqrfac = 1.5, stoptreeOut = F) {
   
   TS <- as.data.frame(cbind(TY,TX))
   N <- dim(TX)[1]
@@ -19,9 +19,11 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
   }
   
   if(!converge){
+    if(stoptreeOut){
     convergence <- FALSE
     s <- smoothness
     t <- conv.threshold.clas
+    }
     L <- forest.size
     prediction.matrix <- matrix(data = 0, nrow = N, ncol = L)
     if(classification){
@@ -123,27 +125,29 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
         }
         
         vote.final <- levels(TY)[max.col(vote.matrix, ties.method="random")]
-        oob_err[l] <- sum(vote.final[which(oob.vector!=0)]!=TY[which(oob.vector!=0)])/N
+        oob_err[l] <- mean(vote.final[which(oob.vector!=0)]!=TY[which(oob.vector!=0)])
         
-        if(!convergence){
-          if(l > s){
-            moob <- mean(oob_err[c((l-s):l)])  # Mittelwert des Fehlers der letzten s Bäume
-            diffoob <- vector(mode = "numeric")  
-            diffoob <- abs(oob_err[c((l-s):l)] - moob)  # absolute Abweichung der letzten s Bäume vom Mittelwert
-            mdiffoob <- mean(diffoob)  # Mittelwert der Abweichung
-            
-            # convergence?
-            if(abs(mdiffoob) < t){  # which value of t would be a good one?
-              stoptree <- l
-              convergence <- TRUE
+        if(stoptreeOut){
+          if(!convergence){
+            if(l > s){
+              moob <- mean(oob_err[c((l-s):l)])  # Mittelwert des Fehlers der letzten s Bäume
+              diffoob <- vector(mode = "numeric")  
+              diffoob <- abs(oob_err[c((l-s):l)] - moob)  # absolute Abweichung der letzten s Bäume vom Mittelwert
+              mdiffoob <- mean(diffoob)  # Mittelwert der Abweichung
+              
+              # convergence?
+              if(abs(mdiffoob) < t){  # which value of t would be a good one?
+                stoptree <- l
+                convergence <- TRUE
+              }
             }
           }
         }
+
         
         if(leaf.weights){
           weighted.vote.final <- levels(TY)[max.col(weighted.vote.matrix, ties.method="random")]
-          weighted.oob_err[l] <- sum(weighted.vote.final[which(oob.vector!=0)]!=TY[which(oob.vector!=0)])/N
-          
+          weighted.oob_err[l] <- mean(weighted.vote.final[which(oob.vector!=0)]!=TY[which(oob.vector!=0)])
         }
         
         prediction.correct[which(prediction.matrix[,l] == TY)] <- prediction.correct[which(prediction.matrix[,l] == TY)] + 1
@@ -181,7 +185,9 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
     
     # prediction of the forest in case of classification
     if(classification){
-      result$stoptree <- stoptree
+      if(stoptreeOut){
+        result$stoptree <- stoptree
+      }
       result$oob.error <- oob_err
       result$type <- "classification"
       if(leaf.weights){
@@ -276,9 +282,9 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
       if(classification){
         # how many times has instance n been predicted correctly
         prediction.correct[which(prediction.matrix[,l] == TY)] <- prediction.correct[which(prediction.matrix[,l] == TY)] + 1
-        oob_err[l] <- sum(vote.final[which(oob.vector!=0)]!=TY[which(oob.vector!=0)])/N
+        oob_err[l] <- mean(vote.final[which(oob.vector!=0)]!=TY[which(oob.vector!=0)])
         if(leaf.weights){
-          weighted.oob_err[l] <- sum(weighted.vote.final[which(oob.vector!=0)]!=TY[which(oob.vector!=0)])/N
+          weighted.oob_err[l] <- mean(weighted.vote.final[which(oob.vector!=0)]!=TY[which(oob.vector!=0)])
         }
         if(l > s){
           if(!leaf.weights){
@@ -356,4 +362,3 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
     return(result) 
   }
 }
-
