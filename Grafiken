@@ -39,7 +39,7 @@ for(i in 1:20){
   runRF = matrix(NA, 50, 1500)
   runBRF = matrix(NA, 50, 1500)
   stop <- vector("numeric", length = 50)
-  for(j in 1:20){
+  for(j in 1:50){
     print(c(i,j))
     task <- getOMLDataSet(data.id = dataID[i], verbosity = 0)
     task <- task$data
