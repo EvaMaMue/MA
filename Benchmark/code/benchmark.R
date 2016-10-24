@@ -1,6 +1,7 @@
 library(mlr)
 library(batchtools)
 library(plyr)
+library(OpenML)
 
 dir = "/home/probst/Abschlussarbeiten/BoostedRF/MA/Benchmark"
 setwd(paste0(dir,"/results"))
@@ -29,13 +30,13 @@ addAlgorithm("eval", fun = function(job, data, instance,  ...) {
   type = getTaskType(task)
   # set here better defaults for each package?
   if(type == "classif") {
-    learners = list(makeLearner("classif.ranger", par.vals = list(ntree = 5000), predict.type = "prob"), makeLearner("classif.brf.conv", predict.type = "prob"))
+    learners = list(makeLearner("classif.rfsrc", par.vals = list(ntree = 5000), predict.type = "prob"), makeLearner("classif.brf.conv", predict.type = "prob"))
     }
   if(type == "regr"){
-    learners = list(makeLearner("regr.ranger", par.vals = list(ntree = 5000)), makeLearner("regr.brf.conv"))
+    learners = list(makeLearner("regr.rfsrc", par.vals = list(ntree = 5000)), makeLearner("regr.brf.conv"))
   }
   measures = MEASURES(type)
-  rdesc = makeResampleDesc("RepCV", folds = 2, reps = 10, stratify = FALSE)
+  rdesc = makeResampleDesc("RepCV", folds = 2, reps = 2, stratify = FALSE)
   configureMlr(on.learner.error = "warn", show.learner.output = FALSE)
   bmr = benchmark(learners, task, rdesc, measures, keep.pred = FALSE, models = FALSE, show.info = TRUE)
   bmr
@@ -56,3 +57,9 @@ getStatus()
 getErrorMessages()
 
 res_classif_load = reduceResultsList(ids = 2, fun = function(r) as.list(r), reg = regis)
+
+
+# zu Debugzwecken
+#lrn.id = "ranger"
+#par.vals = as.list(ades[1,-1])
+#data$did = OMLDATASETS[13]
