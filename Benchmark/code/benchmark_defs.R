@@ -8,7 +8,7 @@ MEASURES = function(x) switch(x, "classif" = list(acc, ber, mmce, multiclass.au1
 
 library(randomForestSRC)
 
-brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.weights = TRUE, init.weights = NULL, weight.threshold = 20,
+brf <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.weights = TRUE, init.weights = NULL, weight.threshold = 20,
                      smoothness = 200, conv.threshold.clas = 0.001, conv.threshold.reg = 1, converge = TRUE, iqrfac = 1.5, stoptreeOut = F) {
   
   TS <- as.data.frame(cbind(TY,TX))
@@ -135,30 +135,43 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
         vote.final <- levels(TY)[max.col(vote.matrix, ties.method="random")]
         oob_err[l] <- mean(vote.final[which(oob.vector!=0)]!=TY[which(oob.vector!=0)])
         
-        if(stoptreeOut){
-          if(!convergence){
-            if(l > s){
-              moob <- mean(oob_err[c((l-s):l)])  # Mittelwert des Fehlers der letzten s Bäume
-              diffoob <- vector(mode = "numeric")  
-              diffoob <- abs(oob_err[c((l-s):l)] - moob)  # absolute Abweichung der letzten s Bäume vom Mittelwert
-              mdiffoob <- mean(diffoob)  # Mittelwert der Abweichung
-              
-              # convergence?
-              if(abs(mdiffoob) < t){  # which value of t would be a good one?
-                stoptree <- l
-                convergence <- TRUE
-              }
-            }
-          }
-        }
-        
         
         if(leaf.weights){
           weighted.vote.final <- levels(TY)[max.col(weighted.vote.matrix, ties.method="random")]
           weighted.oob_err[l] <- mean(weighted.vote.final[which(oob.vector!=0)]!=TY[which(oob.vector!=0)])
         }
         
+        if(stoptreeOut){
+          if(!convergence){
+            if(l > s){
+              (if(!leaf.weights){
+                moob <- mean(oob_err[c((l-s):l)])  # Mittelwert des Fehlers der letzten s Bäume
+                diffoob <- vector(mode = "numeric")  
+                diffoob <- abs(oob_err[c((l-s):l)] - moob)  # absolute Abweichung der letzten s Bäume vom Mittelwert
+                mdiffoob <- mean(diffoob)  # Mittelwert der Abweichung
+                
+                # convergence?
+                if(abs(mdiffoob) < t){  # which value of t would be a good one?
+                  stoptree <- l
+                  convergence <- TRUE
+                }
+              } else if(leaf.weights){
+                moob <- mean(weighted.oob_err[c((l-s):l)])  # Mittelwert des Fehlers der letzten s Bäume
+                diffoob <- vector(mode = "numeric")  
+                diffoob <- abs(weighted.oob_err[c((l-s):l)] - moob)  # absolute Abweichung der letzten s Bäume vom Mittelwert
+                mdiffoob <- mean(diffoob)  # Mittelwert der Abweichung
+                
+                # convergence?
+                if(abs(mdiffoob) < t){  # which value of t would be a good one?
+                  stoptree <- l
+                  convergence <- TRUE
+                }
+              })
+            }
+          }
+        }
         prediction.correct[which(prediction.matrix[,l] == TY)] <- prediction.correct[which(prediction.matrix[,l] == TY)] + 1
+        
       }
       if(regression){
         oob.vector[which(prediction.matrix[,l]!=0)] <- oob.vector[which(prediction.matrix[,l]!=0)] + 1
@@ -179,11 +192,11 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
       # only if already more than 20 trees in forest
       if(l > weight.threshold){
         if(classification){
-          weights[which(!is.na(prediction.matrix[,l]))] <- 1 - (prediction.correct[which(!is.na(prediction.matrix[,l]))]/oob.vector[which(!is.na(prediction.matrix[,l]))])
+          weights[which(oob.vector!=0)] <- 1 - (prediction.correct[which(oob.vector!=0)]/oob.vector[which(oob.vector!=0)])
         }
         else if(regression){
           # Ausreißer sollen nicht stärker gewichtet werden
-          weights[which((TY < (qntl.75 + iqrfac*iqr)) == (TY > (qntl.25 - iqrfac*iqr)))] <- mse[which((TY < (qntl.75 + iqrfac*iqr)) == (TY > (qntl.25 - iqrfac*iqr)))]
+          weights[which((TY < (qntl.75 + iqrfac*iqr)) | (TY > (qntl.25 - iqrfac*iqr)))] <- mse[which((TY < (qntl.75 + iqrfac*iqr)) | (TY > (qntl.25 - iqrfac*iqr)))]
         }
         # Normalisierung der Gewichte, sodass Summe = 1
         Z <- sum(weights)
@@ -209,6 +222,7 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
       result$mse <- mean(mse, na.rm = T)
       result$type <- "regression"
     }
+    result$predictions <- prediction.matrix
     result$forest <- forest
     result$num.trees <- forest.size
     result$num.levels <- length(levels(TY))
@@ -362,6 +376,7 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
       result$type <- "regression"
       result$mdiffmse <- mdiffmse
     }
+    result$predictions <- prediction.matrix
     result$forest <- forest
     result$num.levels <- length(levels(TY))
     result$levels <- levels(TY)
@@ -371,7 +386,9 @@ brf.conv <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.wei
   }
 }
 
-brf.predict <- function(object, data, prob = FALSE){ 
+
+
+predict.brf <- function(object, data, prob = FALSE){ 
   if(class(object)!="brf"){
     stop("object needs to be of class brf")
   }
@@ -384,7 +401,7 @@ brf.predict <- function(object, data, prob = FALSE){
   }
   
   
-  
+
   
   if (object$type == "classification") {
     for(t in 1:(object$num.trees)){
@@ -430,9 +447,9 @@ brf.predict <- function(object, data, prob = FALSE){
 
 library(mlr)
 
-makeRLearner.classif.brf.conv = function() {
+makeRLearner.classif.brf = function() {
   makeRLearnerClassif(
-    cl = "classif.brf.conv",
+    cl = "classif.brf",
     package = "MASS",
     par.set = makeParamSet(
       makeNumericLearnerParam(id = "forest.size", lower = 20, default = 300),
@@ -449,32 +466,32 @@ makeRLearner.classif.brf.conv = function() {
     ),
     properties = c("twoclass", "multiclass", "numerics", "factors", "prob"),
     name = "Boosted Random Forest",
-    short.name = "brf.conv",
+    short.name = "brf",
     note = ""
   )
 }
 
 
-trainLearner.classif.brf.conv = function(.learner, .task, .subset, .weights = NULL, ...) {
+trainLearner.classif.brf = function(.learner, .task, .subset, .weights = NULL, ...) {
   f = getTaskTargetNames(.task)
   data = getTaskData(.task, subset = .subset)
   TY = data[, f]
   TX = data[,colnames(data) != f, drop = FALSE]
-  brf.conv(TY = TY, TX = TX, ...)
+  brf(TY = TY, TX = TX, ...)
 }
 
-predictLearner.classif.brf.conv = function(.learner, .model, .newdata, ...) {
+predictLearner.classif.brf = function(.learner, .model, .newdata, ...) {
   if (.learner$predict.type == "response") {
-    p = brf.predict(.model$learner.model, data = .newdata, prob = FALSE) }
+    p = predict.brf(.model$learner.model, data = .newdata, prob = FALSE) }
   else {
-    p = brf.predict(.model$learner.model, data = .newdata, prob = TRUE)
+    p = predict.brf(.model$learner.model, data = .newdata, prob = TRUE)
   }
   return(p)
 }
 
-makeRLearner.regr.brf.conv = function() {
+makeRLearner.regr.brf = function() {
   makeRLearnerRegr(
-    cl = "regr.brf.conv",
+    cl = "regr.brf",
     package = "MASS",
     par.set = makeParamSet(
       makeNumericLearnerParam(id = "forest.size", lower = 20, default = 500),
@@ -491,19 +508,19 @@ makeRLearner.regr.brf.conv = function() {
     ),
     properties = c("numerics", "factors"),
     name = "Boosted Random Forest",
-    short.name = "brf.conv",
+    short.name = "brf",
     note = ""
   )
 }
 
-trainLearner.regr.brf.conv = function(.learner, .task, .subset, .weights = NULL, ...) {
+trainLearner.regr.brf = function(.learner, .task, .subset, .weights = NULL, ...) {
   f = getTaskTargetNames(.task)
   data = getTaskData(.task, subset = .subset)
   TY = data[, f]
   TX = data[,colnames(data) != f, drop = FALSE]
-  brf.conv(TY = TY, TX = TX, ...)
+  brf(TY = TY, TX = TX, ...)
 }
 
-predictLearner.regr.brf.conv = function(.learner, .model, .newdata, ...) {
-  brf.predict(.model$learner.model, data = .newdata, prob = FALSE)
+predictLearner.regr.brf = function(.learner, .model, .newdata, ...) {
+  predict.brf(.model$learner.model, data = .newdata, prob = FALSE)
 }
