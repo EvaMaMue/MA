@@ -1,9 +1,8 @@
 
 library(mlr)
-
-makeRLearner.classif.brf.conv = function() {
+makeRLearner.classif.brf = function() {
   makeRLearnerClassif(
-    cl = "classif.brf.conv",
+    cl = "classif.brf",
     package = "MASS",
     par.set = makeParamSet(
       makeNumericLearnerParam(id = "forest.size", lower = 20, default = 300),
@@ -20,32 +19,32 @@ makeRLearner.classif.brf.conv = function() {
     ),
     properties = c("twoclass", "multiclass", "numerics", "factors", "prob"),
     name = "Boosted Random Forest",
-    short.name = "brf.conv",
+    short.name = "brf",
     note = ""
   )
 }
 
 
-trainLearner.classif.brf.conv = function(.learner, .task, .subset, .weights = NULL, ...) {
+trainLearner.classif.brf = function(.learner, .task, .subset, .weights = NULL, ...) {
   f = getTaskTargetNames(.task)
   data = getTaskData(.task, subset = .subset)
   TY = data[, f]
   TX = data[,colnames(data) != f, drop = FALSE]
-  brf.conv(TY = TY, TX = TX, ...)
+  brf(TY = TY, TX = TX, ...)
 }
 
-predictLearner.classif.brf.conv = function(.learner, .model, .newdata, ...) {
+predictLearner.classif.brf = function(.learner, .model, .newdata, ...) {
   if (.learner$predict.type == "response") {
-    p = brf.predict(.model$learner.model, data = .newdata, prob = FALSE) }
+    p = predict.brf(.model$learner.model, data = .newdata, prob = FALSE) }
   else {
-    p = brf.predict(.model$learner.model, data = .newdata, prob = TRUE)
+    p = predict.brf(.model$learner.model, data = .newdata, prob = TRUE)
   }
   return(p)
 }
 
-makeRLearner.regr.brf.conv = function() {
+makeRLearner.regr.brf = function() {
   makeRLearnerRegr(
-    cl = "regr.brf.conv",
+    cl = "regr.brf",
     package = "MASS",
     par.set = makeParamSet(
       makeNumericLearnerParam(id = "forest.size", lower = 20, default = 500),
@@ -62,21 +61,21 @@ makeRLearner.regr.brf.conv = function() {
     ),
     properties = c("numerics", "factors"),
     name = "Boosted Random Forest",
-    short.name = "brf.conv",
+    short.name = "brf",
     note = ""
   )
 }
 
-trainLearner.regr.brf.conv = function(.learner, .task, .subset, .weights = NULL, ...) {
+trainLearner.regr.brf = function(.learner, .task, .subset, .weights = NULL, ...) {
   f = getTaskTargetNames(.task)
   data = getTaskData(.task, subset = .subset)
   TY = data[, f]
   TX = data[,colnames(data) != f, drop = FALSE]
-  brf.conv(TY = TY, TX = TX, ...)
+  brf(TY = TY, TX = TX, ...)
 }
 
-predictLearner.regr.brf.conv = function(.learner, .model, .newdata, ...) {
-  brf.predict(.model$learner.model, data = .newdata, prob = FALSE)
+predictLearner.regr.brf = function(.learner, .model, .newdata, ...) {
+  predict.brf(.model$learner.model, data = .newdata, prob = FALSE)
 }
 
 data(iris)
@@ -85,7 +84,7 @@ data(iris)
 ## Define the task
 task = makeClassifTask(id = "tutorial", data = iris, target = "Species")
 ## Define the learner
-lrn = makeLearner("classif.brf.conv")
+lrn = makeLearner("classif.brf")
 ## Define the resampling strategy
 rdesc = makeResampleDesc(method = "CV", stratify = TRUE)
 trn = train(lrn, task)
@@ -99,7 +98,7 @@ r
 task = sonar.task
 sonar = getTaskData(sonar.task) 
 ## Define the learner
-lrn = makeLearner("classif.brf.conv", predict.type = "prob")
+lrn = makeLearner("classif.brf", predict.type = "prob")
 trn = train(lrn, task)
 prd = predict(trn, newdata = sonar)
 performance(prd, measures = list(acc, ber, mmce, multiclass.au1u, multiclass.brier, logloss))
@@ -121,7 +120,7 @@ r2
 task = bh.task
 bh.data = getTaskData(bh.task)
 ## Define the learner
-lrn = makeLearner("regr.brf.conv")
+lrn = makeLearner("regr.brf")
 ## Define the resampling strategy
 rdesc = makeResampleDesc(method = "CV")
 trn = train(lrn, task)
