@@ -1,4 +1,4 @@
-brf.predict <- function(object, data, prob = FALSE){ 
+predict.brf <- function(object, data, prob = FALSE){ 
   if(class(object)!="brf"){
     stop("object needs to be of class brf")
   }
