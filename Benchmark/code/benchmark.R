@@ -30,10 +30,10 @@ addAlgorithm("eval", fun = function(job, data, instance,  ...) {
   type = getTaskType(task)
   # set here better defaults for each package?
   if(type == "classif") {
-    learners = list(makeLearner("classif.randomForestSRC", par.vals = list(ntree = 5000), predict.type = "prob"), makeLearner("classif.brf.conv", predict.type = "prob"))
+    learners = list(makeLearner("classif.randomForestSRC", par.vals = list(ntree = 5000), predict.type = "prob"), makeLearner("classif.brf", predict.type = "prob"))
     }
   if(type == "regr"){
-    learners = list(makeLearner("regr.randomForestSRC", par.vals = list(ntree = 5000)), makeLearner("regr.brf.conv"))
+    learners = list(makeLearner("regr.randomForestSRC", par.vals = list(ntree = 5000)), makeLearner("regr.brf"))
   }
   measures = MEASURES(type)
   rdesc = makeResampleDesc("RepCV", folds = 2, reps = 2, stratify = FALSE)
