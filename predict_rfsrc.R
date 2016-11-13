@@ -2,9 +2,6 @@ predict.brf <- function(object, data, prob = FALSE){
   if(class(object)!="brf"){
     stop("object needs to be of class brf")
   }
-  if(object$type == "regression" && prob){
-    stop("probability only for classification possible")
-  }
   
   predictions.matrix <- vector(mode="numeric")
   
@@ -37,6 +34,3 @@ predict.brf <- function(object, data, prob = FALSE){
     }
   }
 }
-
-
-
