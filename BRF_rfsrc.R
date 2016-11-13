@@ -81,7 +81,6 @@ brf <- function(TY, TX, forest.size = 300, leaf.weights = TRUE, sample.weights =
         prediction.matrix[which(tr$inbag!=0),l] <- NA
       } 
       if(leaf.weights){
-        #nenner <- table((as.factor(tr$membership))[which(tr$inbag != 0)]) # Anzahl Beobachtungen je Knoten
         
         classesNodes <- matrix(0, ncol = length(levels(TY)), nrow = tr$leaf.count) #Matrix[k,j]. Zeilen = Knoten k, Spalten = Klassen j, Zellwert = Summe der Gewichte aller Beobachtungen in Klasse j und Knoten k 
         sumweightsNodes <- list() # Summe der Gewichte in Klasse j in Knoten k: sumWeightsNodes[[j]][[k]][1]
@@ -198,10 +197,7 @@ brf <- function(TY, TX, forest.size = 300, leaf.weights = TRUE, sample.weights =
       }
       
       if(leaf.weights){
-        nenner <- table((as.factor(tr$membership))[which(tr$inbag != 0)]) # Anzahl Beobachtungen je Knoten
         
-        #train$Species[which(a$membership == 1 & a$inbag == 0)]
-        #weights[which(a$membership == 1 & a$inbag == 0)]
         classesNodes <- matrix(0, ncol = length(levels(TY)), nrow = tr$leaf.count) #Matrix[k,j]. Zeilen = Knoten k, Spalten = Klassen j, Zellwert = Summe der Gewichte aller Beobachtungen in Klasse j und Knoten k 
         sumweightsNodes <- list() # Summe der Gewichte in Klasse j in Knoten k: sumWeightsNodes[[j]][[k]][1]
         
@@ -214,10 +210,6 @@ brf <- function(TY, TX, forest.size = 300, leaf.weights = TRUE, sample.weights =
           classesNodes[,i]<- as.vector(sapply(1:tr$leaf.count, function(x) sumweightsNodes[[i]][[x]][1]))
         }
         
-        # Bestimme #Gewichte in Klasse j und Knoten k/#Beobachtungen in Knoten k -> Matrix[k,j]
-        # anteilClassesNodes <- apply(classesNodes,2,function(x) x/nenner)
-        # anteilClassesNodes[which(is.na(anteilClassesNodes))] <- 0
-        
         # Lege fest, welcher Klasse Beobachtung i zugeordnet wird, falls sie in Knoten k fällt -> majClassNodes[k] ist Klasse
         majClassNodes <- apply(classesNodes,1, function(x) which.max(x))
         
@@ -225,7 +217,6 @@ brf <- function(TY, TX, forest.size = 300, leaf.weights = TRUE, sample.weights =
         majClassNodesForest[[l]] <- majClassNodes
         
         # Prediction der OOB Beobachtungen für Baum l, um OOB Fehlerrate berechnen zu können, falls inbag -> NA
-        
         predictedClass <- apply(tr$membership,2, function(x) as.integer(majClassNodes[x]))
         predictedClass[which(tr$inbag!=0)] <- NA
         
