@@ -1,7 +1,7 @@
 library(randomForestSRC)
 
-brf <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.weights = TRUE, init.weights = NULL, weight.threshold = 20,
-                smoothness = 200, conv.threshold.clas = 0.001, converge = TRUE, stoptreeOut = F, treeWeight = F) {
+brf <- function(TY, TX, forest.size = 300, leaf.weights = TRUE, sample.weights = FALSE, init.weights = NULL, weight.threshold = 20,
+                smoothness = 200, conv.threshold.clas = 0.001, converge = TRUE, stoptreeOut = F) {
   
   TS <- as.data.frame(cbind(TY,TX))
   N <- dim(TX)[1]
@@ -11,12 +11,8 @@ brf <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.weights 
   # classification or regression?
   classification <- is.factor(TY)
   regression <- is.numeric(TY) || is.integer(TY)
-  if(!(classification || regression))
+  if(!classification)
     stop(paste("Target class", class(TY), "is not suitable for brf"))
-  
-  if(regression && leaf.weights){
-    stop("leaf.weights not possible if regression, set to FALSE")
-  }
   
   # Definition der nötigen Objekte
   
@@ -297,4 +293,5 @@ brf <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.weights 
     return(result) 
   }
 }
+
 
