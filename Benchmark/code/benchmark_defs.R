@@ -8,8 +8,8 @@ MEASURES = function(x) switch(x, "classif" = list(acc, ber, mmce, multiclass.au1
 
 library(randomForestSRC)
 
-brf <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.weights = TRUE, init.weights = NULL, weight.threshold = 20,
-                     smoothness = 200, conv.threshold.clas = 0.001, conv.threshold.reg = 1, converge = TRUE, iqrfac = 1.5, stoptreeOut = F) {
+brf <- function(TY, TX, forest.size = 300, leaf.weights = TRUE, sample.weights = FALSE, init.weights = NULL, weight.threshold = 20,
+                smoothness = 200, conv.threshold.clas = 0.001, converge = TRUE, stoptreeOut = F) {
   
   TS <- as.data.frame(cbind(TY,TX))
   N <- dim(TX)[1]
@@ -19,69 +19,46 @@ brf <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.weights 
   # classification or regression?
   classification <- is.factor(TY)
   regression <- is.numeric(TY) || is.integer(TY)
-  if(!(classification || regression))
+  if(!classification)
     stop(paste("Target class", class(TY), "is not suitable for brf"))
   
-  if(regression && leaf.weights){
-    stop("leaf.weights not possible if regression, set to FALSE")
-  }
+  # Definition der nötigen Objekte
   
-  if(!converge){
-    if(stoptreeOut){
+  if(!converge){ # Objekte, die nur nötig sind, falls Anzahl der Bäume a priori vorgegeben wird
+    if(stoptreeOut){ # falls Ausgabe des Baumes gewünscht, nach welchem Algorithmus bei Konergenz abgebrochen hätte
       convergence <- FALSE
       s <- smoothness
       t <- conv.threshold.clas
     }
     L <- forest.size
-    prediction.matrix <- matrix(data = 0, nrow = N, ncol = L)
-    if(classification){
-      weight.matrix <- matrix(data = 0, nrow = N, ncol = L)
-      oob_err <- vector(mode = "numeric")
-      weighted.oob_err <- vector(mode = "numeric")
-    }
+    prediction.matrix <- matrix(data = 0, nrow = N, ncol = L) # Matrix[n,l], in der für jeden Baum l für jede Beobachtung n die Vorhersage abgespeichert wird
+    weight.matrix <- matrix(data = 0, nrow = N, ncol = L) # Matrix[n,l]: Gewicht der Beobachtung n in Baum l
   }
   
-  if(converge){
-    s <- smoothness
-    weight.matrix <- matrix(data = 0, nrow = N, ncol = 1)
-    if(classification){
-      t <- conv.threshold.clas
-      oob_err <- vector(mode = "numeric")
-      weighted.oob_err <- vector(mode = "numeric")
-    }
-    if(regression){
-      t <- conv.threshold.reg
-      mse.conv <- vector(mode = "numeric")
-    }
-    prediction.matrix <- matrix(data = 0, nrow = N, ncol = 1)
+  if(converge){ # Definition von Objekten, welche nur bei Nutzung des Konvergenzkriteriums nötig sind
+    s <- smoothness # OOB Fehler soll über die letzten s Bäume "konstant" bleiben
+    weight.matrix <- matrix(data = 0, nrow = N, ncol = 1) # Matrix[n,l]: Gewicht der Beobachtung n in Baum l
+    t <- conv.threshold.clas # Schwellenwert, um welchen der Mittelwert des OOB Fehlers über die letzten s Bäume nicht abweichen soll !!!!
+    prediction.matrix <- matrix(data = 0, nrow = N, ncol = 1) # Matrix[n,l] Vorhersage der Beobachtung n in Baum l
   }
   
-  if(classification){
-    prediction.correct <- vector(mode = "numeric", length = N)
-  }
+  oob_err <- vector(mode = "numeric") # Vektor[l]: Out Of Bag Fehlerrate nach Fit den l-ten Baumes
+  prediction.correct <- vector(mode = "numeric", length = N) # Vektor[n]: Anzahl Bäume korrekter Vorhersagen für n, falls Beobachtung n OOB
+  oob.vector <- vector(mode = "numeric", length = N) # Vektor[n]: Anzahl der Bäume, für welche Beobachtung n OOB
+  weights <- vector(mode = "numeric", length = N) # Vektor[n]: Gewicht für Beobachtung n (ändert sich in jedem Iterationsschritt)
+  vote.matrix <- matrix(data = 0, ncol = length(levels(TY)), nrow = N) # Matrix[n,j]: Anzahl der Bäume mit Vorhersage Klasse j für Beobachtung n 
+  vote.final <- vector(mode = "numeric", length = N) # Vektor[n]: majority Vote für Beobachtung n in aktueller Iteration (ändert sich in jedem Iterationsschritt)
+  majClassNodesForest <- list() # Liste, die vorhergesagte Klasse für Beobachtung n angibt, je nachdem, in welchen Endknoten die Beobachtung fällt
+  result <- list() # Liste, in denen Werte zur Ausgabe der Funktion abgespeichert werden
+  forest <- list() # Liste, bestehend aus den Bäumen
   
-  oob.vector <- vector(mode = "numeric", length = N)
-  weights <- vector(mode = "numeric", length = N)
-  vote.final <- vector(mode = "numeric", length = N)
-  weighted.vote.matrix <- matrix(data = 0, ncol = length(levels(TY)), nrow = N)
-  weighted.vote.final <- vector(mode = "numeric", length = N)
-  vote.matrix <- matrix(data = 0, ncol = length(levels(TY)), nrow = N)
-  result <- list()
-  forest <- list()
-  
-  if(regression){
-    iqr <- IQR(TY, type = 7)
-    qntl.75 <- quantile(TY)[4]
-    qntl.25 <- quantile(TY)[2]
-    bias <- vector(mode = "numeric", length = N)
-  }
   
   # Levels nummerieren
-  if(classification){
-    result$lev.names <- levels(TY)
-    lev.names <- levels(TY)
-    levels(TY) <- c(1:length(levels(TY)))
-  }
+  
+  result$lev.names <- levels(TY)
+  lev.names <- levels(TY)
+  levels(TY) <- c(1:length(levels(TY)))
+  
   
   # initialise weights for Training Instances of first step
   if(is.null(init.weights)){ # default is 1/N
@@ -91,148 +68,116 @@ brf <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.weights 
   
   
   
-  ##################### without convergence #####################
+  # NO CONVERGENCE --------------------------------------------------------------------------------------------------------
   if(!converge){
     for(l in 1:L){
       
       # build tree of sampled instances
       if(sample.weights){
         tr <- rfsrc(TY~., data = TS, ntree = 1, case.wt = weights, forest = TRUE, membership = T) 
-      } else tr <- rfsrc(TY~., data = TS, ntree = 1, case.wt = NULL, forest = TRUE, membership = T) # only one tree is built, evtl mtry aus N(sqrt(M),M/50) 
+      } else tr <- rfsrc(TY~., data = TS, ntree = 1, case.wt = NULL, forest = TRUE, membership = T) 
       
       # save tree in forest
-      
       forest[[l]] <- tr
-      
-      
-      # predictions of current tree, to be saved in data.frame
-      if(classification){
-        prediction.matrix[,l] <- tr$class.oob
-        prediction.matrix[which(tr$inbag!=0),l] <- NA
-      }
-      
-      if(regression){
-        prediction.matrix[,l] <- tr$predicted.oob
-        prediction.matrix[which(tr$inbag!=0),l] <- 0
-      }
-      
       
       #save weights
       weight.matrix[,l] <- weights
       
-      if(classification){
-        oob.vector[which(!is.na(prediction.matrix[,l]))] <- oob.vector[which(!is.na(prediction.matrix[,l]))] + 1
+      # predictions of current tree, to be saved in data.frame
+      if(!leaf.weights){
+        prediction.matrix[,l] <- tr$class.oob
+        prediction.matrix[which(tr$inbag!=0),l] <- NA
+      } 
+      if(leaf.weights){
+        #nenner <- table((as.factor(tr$membership))[which(tr$inbag != 0)]) # Anzahl Beobachtungen je Knoten
         
-        for(j in 1:length(levels(TY))){
-          vote.matrix[,j] <- vote.matrix[,j] + as.numeric(prediction.matrix[,l]==levels(TY)[j] & !is.na(prediction.matrix[,l]))
-        }
-        if(leaf.weights){
-          for(j in 1:length(levels(TY))){
-            weighted.vote.matrix[,j] <- weighted.vote.matrix[,j] + as.numeric(prediction.matrix[,l]==levels(TY)[j] & !is.na(prediction.matrix[,l])) * weights
-          }
-        }
+        classesNodes <- matrix(0, ncol = length(levels(TY)), nrow = tr$leaf.count) #Matrix[k,j]. Zeilen = Knoten k, Spalten = Klassen j, Zellwert = Summe der Gewichte aller Beobachtungen in Klasse j und Knoten k 
+        sumweightsNodes <- list() # Summe der Gewichte in Klasse j in Knoten k: sumWeightsNodes[[j]][[k]][1]
         
-        vote.final <- levels(TY)[max.col(vote.matrix, ties.method="random")]
-        oob_err[l] <- mean(vote.final[which(oob.vector!=0)]!=TY[which(oob.vector!=0)])
-        
-        
-        if(leaf.weights){
-          weighted.vote.final <- levels(TY)[max.col(weighted.vote.matrix, ties.method="random")]
-          weighted.oob_err[l] <- mean(weighted.vote.final[which(oob.vector!=0)]!=TY[which(oob.vector!=0)])
+        for(i in 1:length(levels(TY))){
+          sumweightsNodes[[i]] <- lapply(1:(tr$leaf.count), 
+                                         function(x) sum(weight.matrix[which(tr$membership == x & tr$inbag != 0 & TY == levels(TY)[i]),l]))
         }
         
-        if(stoptreeOut){
-          if(!convergence){
-            if(l > s){
-              (if(!leaf.weights){
-                moob <- mean(oob_err[c((l-s):l)])  # Mittelwert des Fehlers der letzten s Bäume
-                diffoob <- vector(mode = "numeric")  
-                diffoob <- abs(oob_err[c((l-s):l)] - moob)  # absolute Abweichung der letzten s Bäume vom Mittelwert
-                mdiffoob <- mean(diffoob)  # Mittelwert der Abweichung
-                
-                # convergence?
-                if(abs(mdiffoob) < t){  # which value of t would be a good one?
-                  stoptree <- l
-                  convergence <- TRUE
-                }
-              } else if(leaf.weights){
-                moob <- mean(weighted.oob_err[c((l-s):l)])  # Mittelwert des Fehlers der letzten s Bäume
-                diffoob <- vector(mode = "numeric")  
-                diffoob <- abs(weighted.oob_err[c((l-s):l)] - moob)  # absolute Abweichung der letzten s Bäume vom Mittelwert
-                mdiffoob <- mean(diffoob)  # Mittelwert der Abweichung
-                
-                # convergence?
-                if(abs(mdiffoob) < t){  # which value of t would be a good one?
-                  stoptree <- l
-                  convergence <- TRUE
-                }
-              })
+        for(i in 1:length(levels(TY))){
+          classesNodes[,i]<- as.vector(sapply(1:tr$leaf.count, function(x) sumweightsNodes[[i]][[x]][1]))
+        }
+        
+        # Lege fest, welcher Klasse Beobachtung i zugeordnet wird, falls sie in Knoten k fällt -> majClassNodes[k] ist Klasse
+        majClassNodes <- apply(classesNodes,1, function(x) which.max(x))
+        
+        # Abspeichern von majClassNodes für jeden Baum l
+        majClassNodesForest[[l]] <- majClassNodes
+        
+        # Prediction der OOB Beobachtungen für Baum l, um OOB Fehlerrate berechnen zu können, falls inbag -> NA
+        predictedClass <- apply(tr$membership,2, function(x) as.integer(majClassNodes[x]))
+        predictedClass[which(tr$inbag!=0)] <- NA
+        
+        prediction.matrix[,l] <- predictedClass
+      }
+      
+      
+      oob.vector[which(!is.na(prediction.matrix[,l]))] <- oob.vector[which(!is.na(prediction.matrix[,l]))] + 1
+      
+      
+      for(j in 1:length(levels(TY))){
+        vote.matrix[,j] <- vote.matrix[,j] + as.numeric(prediction.matrix[,l]==levels(TY)[j] & !is.na(prediction.matrix[,l]))
+      }
+      
+      vote.final <- levels(TY)[max.col(vote.matrix, ties.method="random")]
+      oob_err[l] <- mean(vote.final[which(oob.vector!=0)]!=TY[which(oob.vector!=0)])
+      
+      
+      if(stoptreeOut){
+        if(!convergence){
+          if(l > s){
+            moob <- mean(oob_err[c((l-s):l)])  # Mittelwert des Fehlers der letzten s Bäume
+            diffoob <- vector(mode = "numeric")  
+            diffoob <- abs(oob_err[c((l-s):l)] - moob)  # absolute Abweichung der letzten s Bäume vom Mittelwert
+            mdiffoob <- mean(diffoob)  # Mittelwert der Abweichung
+            
+            # convergence?
+            if(abs(mdiffoob) < t){  # which value of t would be a good one?
+              stoptree <- l
+              convergence <- TRUE
             }
           }
         }
-        prediction.correct[which(prediction.matrix[,l] == TY)] <- prediction.correct[which(prediction.matrix[,l] == TY)] + 1
-        
       }
-      if(regression){
-        oob.vector[which(prediction.matrix[,l]!=0)] <- oob.vector[which(prediction.matrix[,l]!=0)] + 1
-        vote.final <- apply(prediction.matrix,1,sum)/oob.vector
-        vote.final[which(is.na(vote.final))] <- 0
-        bias[which(!is.na(vote.final))] <- TY[which(!is.na(vote.final))] - vote.final[which(!is.na(vote.final))]
-        var <- vector(mode = "numeric", length = N)
-        for(j in 1:l){
-          oob <- which(prediction.matrix[,j]!=0)
-          var[oob] <- ((prediction.matrix[oob,j] - vote.final[oob])^2) + var[oob]
-        }
-        var <- var/oob.vector
-        var[which(is.na(var))] <- 0
-        mse <- var + (bias)^2
-      }
+      prediction.correct[which(prediction.matrix[,l] == TY)] <- prediction.correct[which(prediction.matrix[,l] == TY)] + 1
       
       # weights: # trees where x is OOB and which predict correct value / # trees where x is OOB
       # only if already more than 20 trees in forest
       if(l > weight.threshold){
-        if(classification){
-          weights[which(oob.vector!=0)] <- 1 - (prediction.correct[which(oob.vector!=0)]/oob.vector[which(oob.vector!=0)])
-        }
-        else if(regression){
-          # Ausreißer sollen nicht stärker gewichtet werden
-          weights[which((TY < (qntl.75 + iqrfac*iqr)) | (TY > (qntl.25 - iqrfac*iqr)))] <- mse[which((TY < (qntl.75 + iqrfac*iqr)) | (TY > (qntl.25 - iqrfac*iqr)))]
-        }
+        weights[which(oob.vector!=0)] <- 1 - (prediction.correct[which(oob.vector!=0)]/oob.vector[which(oob.vector!=0)])
+        
         # Normalisierung der Gewichte, sodass Summe = 1
         Z <- sum(weights)
         weights <- weights/Z
       }
     }
     
-    # prediction of the forest in case of classification
-    if(classification){
-      if(stoptreeOut){
-        result$stoptree <- stoptree
-      }
-      result$oob.error <- oob_err
-      result$type <- "classification"
-      if(leaf.weights){
-        result$weighted.oob.error <- weighted.oob_err
-        result$weights <- weight.matrix
-      }
-      result$leaf.weights <- leaf.weights
-    }
+    # Speichern der Ausgabeobjekte der Funktion
     
-    else if(regression){
-      result$mse <- mean(mse, na.rm = T)
-      result$type <- "regression"
-    }
+    result$oob.error <- oob_err
+    result$type <- "classification"
+    result$leaf.weights <- leaf.weights
     result$predictions <- prediction.matrix
     result$forest <- forest
     result$num.trees <- forest.size
     result$num.levels <- length(levels(TY))
     result$levels <- levels(TY)
     class(result) <- "brf"
+    if(leaf.weights){
+      result$weights <- weight.matrix
+      result$majClassNodesForest <- majClassNodesForest
+    }
+    if(stoptreeOut) result$stoptree <- stoptree
     
     return(result)
   }
   
-  ########################## with convergence #############################
+  # CONVERGENCE ---------------------------------------------------------------------------------------------------
   
   if(converge){
     l <- 1
@@ -248,110 +193,88 @@ brf <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.weights 
       forest[[l]] <- tr
       
       
-      if(classification){
-        # predictions of current tree, to be saved in data.frame
-        if(l > 1){
-          prediction.matrix <- cbind(prediction.matrix, tr$class.oob)
-          prediction.matrix[which(tr$inbag==1),l] <- NA
-          weight.matrix <- cbind(weight.matrix, weights)
-        } else{
-          prediction.matrix[,l] <- tr$class.oob
-          prediction.matrix[which(tr$inbag==1),l] <- NA
-          weight.matrix[,l] <- weights
-        }
-        oob.vector[which(!is.na(prediction.matrix[,l]))] <- oob.vector[which(!is.na(prediction.matrix[,l]))] + 1 # wie oft war Beobachtung n OOB
-        
-        for(j in 1:length(levels(TY))){
-          vote.matrix[,j] = vote.matrix[,j] + as.numeric(prediction.matrix[,l]==levels(TY)[j] & !is.na(prediction.matrix[,l]))
-        }
-        if(leaf.weights){
-          for(j in 1:length(levels(TY))){
-            weighted.vote.matrix[,j] <- weighted.vote.matrix[,j] + as.numeric(prediction.matrix[,l]==levels(TY)[j] & !is.na(prediction.matrix[,l])) * weights
-          }
-        }
-        
-        vote.final <- levels(TY)[max.col(vote.matrix, ties.method="random")]
-        if(leaf.weights){
-          weighted.vote.final <- levels(TY)[max.col(weighted.vote.matrix, ties.method="random")]
-        }
+      
+      # predictions of current tree, to be saved in data.frame
+      if(l > 1){
+        prediction.matrix <- cbind(prediction.matrix, tr$class.oob)
+        prediction.matrix[which(tr$inbag==1),l] <- NA
+        weight.matrix <- cbind(weight.matrix, weights)
+      } else{
+        prediction.matrix[,l] <- tr$class.oob
+        prediction.matrix[which(tr$inbag==1),l] <- NA
+        weight.matrix[,l] <- weights
       }
       
-      if(regression){
-        # predictions of current tree, to be saved in data.frame
-        if(l > 1){
-          prediction.matrix <- cbind(prediction.matrix, tr$predicted.oob)
-          prediction.matrix[which(tr$inbag==1),l] <- 0
-          weight.matrix <- cbind(weight.matrix, weights)
-        } else{
-          prediction.matrix[,l] <- tr$predicted.oob
-          prediction.matrix[which(tr$inbag==1),l] <- 0
-          weight.matrix[,l] <- weights
+      if(leaf.weights){
+        nenner <- table((as.factor(tr$membership))[which(tr$inbag != 0)]) # Anzahl Beobachtungen je Knoten
+        
+        #train$Species[which(a$membership == 1 & a$inbag == 0)]
+        #weights[which(a$membership == 1 & a$inbag == 0)]
+        classesNodes <- matrix(0, ncol = length(levels(TY)), nrow = tr$leaf.count) #Matrix[k,j]. Zeilen = Knoten k, Spalten = Klassen j, Zellwert = Summe der Gewichte aller Beobachtungen in Klasse j und Knoten k 
+        sumweightsNodes <- list() # Summe der Gewichte in Klasse j in Knoten k: sumWeightsNodes[[j]][[k]][1]
+        
+        for(i in 1:length(levels(TY))){
+          sumweightsNodes[[i]] <- lapply(1:(tr$leaf.count), 
+                                         function(x) sum(weight.matrix[which(tr$membership == x & tr$inbag != 0 & TY == levels(TY)[i]),l]))
         }
-        oob.vector[which(prediction.matrix[,l]!=0)] <- oob.vector[which(prediction.matrix[,l]!=0)] + 1
-        vote.final <- apply(prediction.matrix,1,sum)/oob.vector
-        vote.final[which(is.na(vote.final))] <- 0
-        bias[which(oob.vector!=0)] <- TY[which(oob.vector!=0)] - vote.final[which(oob.vector!=0)]
-        var <- vector(mode = "numeric", length = N)
-        for(j in 1:l){
-          oob <- which(prediction.matrix[,j]!=0) # all instances that are out of bag
-          var[oob] <- ((prediction.matrix[oob,j] - vote.final[oob])^2) + var[oob] # varianz
+        
+        for(i in 1:length(levels(TY))){
+          classesNodes[,i]<- as.vector(sapply(1:tr$leaf.count, function(x) sumweightsNodes[[i]][[x]][1]))
         }
-        var <- var/oob.vector
-        var[which(is.na(var))] <- 0
-        mse <- var + (bias)^2
+        
+        # Bestimme #Gewichte in Klasse j und Knoten k/#Beobachtungen in Knoten k -> Matrix[k,j]
+        # anteilClassesNodes <- apply(classesNodes,2,function(x) x/nenner)
+        # anteilClassesNodes[which(is.na(anteilClassesNodes))] <- 0
+        
+        # Lege fest, welcher Klasse Beobachtung i zugeordnet wird, falls sie in Knoten k fällt -> majClassNodes[k] ist Klasse
+        majClassNodes <- apply(classesNodes,1, function(x) which.max(x))
+        
+        # Abspeichern von majClassNodes für jeden Baum l
+        majClassNodesForest[[l]] <- majClassNodes
+        
+        # Prediction der OOB Beobachtungen für Baum l, um OOB Fehlerrate berechnen zu können, falls inbag -> NA
+        
+        predictedClass <- apply(tr$membership,2, function(x) as.integer(majClassNodes[x]))
+        predictedClass[which(tr$inbag!=0)] <- NA
+        
+        if(l>1){prediction.matrix <- cbind(prediction.matrix, predictedClass)
+        } else prediction.matrix[,l] <- predictedClass
       }
       
-      if(classification){
-        # how many times has instance n been predicted correctly
-        prediction.correct[which(prediction.matrix[,l] == TY)] <- prediction.correct[which(prediction.matrix[,l] == TY)] + 1
-        oob_err[l] <- mean(vote.final[which(oob.vector!=0)]!=TY[which(oob.vector!=0)])
-        if(leaf.weights){
-          weighted.oob_err[l] <- mean(weighted.vote.final[which(oob.vector!=0)]!=TY[which(oob.vector!=0)])
-        }
-        if(l > s){
-          if(!leaf.weights){
-            moob <- mean(oob_err[c((l-s):l)])  # Mittelwert des Fehlers der letzten s Bäume
-            diffoob <- vector(mode = "numeric")  
-            diffoob <- abs(oob_err[c((l-s):l)] - moob)  # absolute Abweichung der letzten s Bäume vom Mittelwert
-            mdiffoob <- mean(diffoob)  # Mittelwert der Abweichung
-            
-            # convergence?
-            if(abs(mdiffoob) < t){  # which value of t would be a good one?
-              convergence <- TRUE
-            }
-          } else {moob <- mean(weighted.oob_err[c((l-s):l)])  # Mittelwert des Fehlers der letzten s Bäume
-          diffoob <- vector(mode = "numeric")  
-          diffoob <- abs(weighted.oob_err[c((l-s):l)] - moob)  # absolute Abweichung der letzten s Bäume vom Mittelwert
-          mdiffoob <- mean(diffoob)  # Mittelwert der Abweichung
-          
-          # convergence?
-          if(abs(mdiffoob) < t){  # which value of t would be a good one?
-            convergence <- TRUE
-          }
-          }
-        } 
+      oob.vector[which(!is.na(prediction.matrix[,l]))] <- oob.vector[which(!is.na(prediction.matrix[,l]))] + 1 # wie oft war Beobachtung n OOB
+      
+      for(j in 1:length(levels(TY))){
+        vote.matrix[,j] = vote.matrix[,j] + as.numeric(prediction.matrix[,l]==levels(TY)[j] & !is.na(prediction.matrix[,l]))
       }
-      if(regression){
-        mse.conv[l] <- mean(mse, na.rm = TRUE)
-        if(l > s){
-          mmse <- mean(mse.conv[c((l-s):l)]) # Mittel des MSEs der letzten s Bäume 
-          diffmse <- abs(mse.conv[c((l-s):l)] - mmse)
-          mdiffmse <- mean(diffmse)
-          if(abs(mdiffmse) < t){
-            convergence <- TRUE
-          }
+      
+      vote.final <- levels(TY)[max.col(vote.matrix, ties.method="random")]
+      
+      
+      prediction.correct[which(prediction.matrix[,l] == TY)] <- prediction.correct[which(prediction.matrix[,l] == TY)] + 1
+      oob_err[l] <- mean(vote.final[which(oob.vector!=0)]!=TY[which(oob.vector!=0)])
+      
+      if(l > s){
+        
+        moob <- mean(oob_err[c((l-s):l)])  # Mittelwert des Fehlers der letzten s Bäume
+        diffoob <- vector(mode = "numeric")  
+        diffoob <- abs(oob_err[c((l-s):l)] - moob)  # absolute Abweichung der letzten s Bäume vom Mittelwert
+        mdiffoob <- mean(diffoob)  # Mittelwert der Abweichung
+        
+        # convergence?
+        if(abs(mdiffoob) < t){  # which value of t would be a good one?
+          convergence <- TRUE
         }
-      }
+      } 
+      
+      
+      
       # weights: # trees where x is OOB and which predict correct value / # trees where x is OOB
       # for reliability concerns, only if already more than 20 trees in forest
       if((l > weight.threshold) && !convergence){
-        if(classification){
-          weights[which(!is.na(prediction.matrix[,l]))] <- 1 - (prediction.correct[which(!is.na(prediction.matrix[,l]))]/oob.vector[which(!is.na(prediction.matrix[,l]))])
-        }
-        if(regression){
-          # Ausreißer sollen nicht stärker gewichtet werden
-          weights[which((TY < (qntl.75 + iqrfac*iqr)) == (TY > (qntl.25 - iqrfac*iqr)))] <- mse[which((TY < (qntl.75 + iqrfac*iqr)) == (TY > (qntl.25 - iqrfac*iqr)))]
-        }
+        
+        weights[which(!is.na(prediction.matrix[,l]))] <- 1 - (prediction.correct[which(!is.na(prediction.matrix[,l]))]/oob.vector[which(!is.na(prediction.matrix[,l]))])
+        
+        
         # Normalisierung der Gewichte, sodass Summe = 1
         Z <- sum(weights)
         weights <- weights/Z
@@ -359,68 +282,47 @@ brf <- function(TY, TX, forest.size = 300, leaf.weights = FALSE, sample.weights 
       l <- l + 1
     }
     
-    # Return Object
+    # Speichern der Ausgabeobjekte der Funktion
     result$num.trees <- l - 1
-    
-    if(classification){
-      result$oob.error <- oob_err
-      result$type <- "classification"
-      if(leaf.weights){
-        result$oob.error.weighted <- weighted.oob_err
-        result$weights <- weight.matrix
-      }
-    }
+    result$oob.error <- oob_err
+    result$type <- "classification"
     result$leaf.weights <- leaf.weights
-    if(regression){
-      result$mse <- mean(mse, na.rm = T)
-      result$type <- "regression"
-      result$mdiffmse <- mdiffmse
-    }
     result$predictions <- prediction.matrix
     result$forest <- forest
     result$num.levels <- length(levels(TY))
     result$levels <- levels(TY)
     class(result) <- "brf"
     
+    if(leaf.weights){
+      result$weights <- weight.matrix
+      result$majClassNodesForest <- majClassNodesForest
+    }
+    
     return(result) 
   }
 }
-
-
 
 predict.brf <- function(object, data, prob = FALSE){ 
   if(class(object)!="brf"){
     stop("object needs to be of class brf")
   }
-  if(object$type == "regression" && prob){
-    stop("probability only for classification possible")
-  }
+  
   predictions.matrix <- vector(mode="numeric")
-  if(object$leaf.weights){
-    vote.matrix <- matrix(data = 0, nrow = dim(data)[1], ncol = object$num.levels)
-  }
-  
-  
-
   
   if (object$type == "classification") {
     for(t in 1:(object$num.trees)){
-      predictions.matrix <- cbind(predictions.matrix, predict(object$forest[[t]], newdata = data)$class)
+      if(!object$leaf.weights){
+        predictions.matrix <- cbind(predictions.matrix, predict(object$forest[[t]], data)$class)
+      }
       if(object$leaf.weights){
-        for(i in 1:object$num.levels){
-          vote.matrix[which(predictions.matrix[,t]==i),i] <- vote.matrix[which(predictions.matrix[,t]==i),i] + object$weights[which(predictions.matrix[,t]==i),t]
-        }
+        predNode <- predict(object$forest[[t]], data, membership = T)$membership # in welchem Endknoten landet Beobachtung i
+        predClass <- apply(predNode,2, function(x) as.integer(object$majClassNodesForest[[t]][x]))  # welcher Klasse entspricht dieser Knoten in diesem Baum
+        predictions.matrix <- cbind(predictions.matrix, predClass)
       }
     }
     if(!prob){
-      if(!object$leaf.weights){
-        predictions <- object$lev.names[as.numeric(apply(predictions.matrix, 1, function(x) names(which.max(table(x)))))]
-        predictions <- factor(predictions, levels = object$lev.names)
-      } 
-      if(object$leaf.weights){
-        predictions <- object$lev.names[as.numeric(apply(vote.matrix, 1, function(x) which.max(x)))]
-        predictions <- factor(predictions, levels = object$lev.names)
-      }
+      predictions <- object$lev.names[as.numeric(apply(predictions.matrix, 1, function(x) names(which.max(table(x)))))]
+      predictions <- factor(predictions, levels = object$lev.names)
       
       return(predictions)
     }
@@ -430,20 +332,12 @@ predict.brf <- function(object, data, prob = FALSE){
       for(i in 1:object$num.levels){
         predictions.prob <- cbind(predictions.prob, apply(predictions.matrix,1, function(x) length(which(x==i))))
       }
-      predictions.prob <- data.frame(predictions.prob/(object$num.trees))
+      predictions.prob <- predictions.prob/(object$num.trees)
       colnames(predictions.prob) <- object$lev.names
       return(as.matrix(predictions.prob))
     }
   }
-  
-  if (object$type == "regression") {
-    for(t in 1:(object$num.trees)){
-      predictions.matrix <- cbind(predictions.matrix, predict(object$forest[[t]], newdata = data)$predicted)
-    }
-    return(apply(predictions.matrix, 1, mean))
-  }
 }
-
 
 library(mlr)
 
@@ -455,13 +349,11 @@ makeRLearner.classif.brf = function() {
       makeNumericLearnerParam(id = "forest.size", lower = 20, default = 300),
       #makeNumericLearnerParam(id = "init.weights", default = FALSE),
       makeNumericLearnerParam(id = "weight.treshold", default = 20, lower = 20),
-      makeLogicalLearnerParam(id = "leaf.weights", default = FALSE, tunable = FALSE),
+      makeLogicalLearnerParam(id = "leaf.weights", default = TRUE, tunable = FALSE),
       makeLogicalLearnerParam(id = "converge", default = TRUE, tunable = FALSE),
-      makeLogicalLearnerParam(id = "sample.weights", default = TRUE, tunable = FALSE),
+      makeLogicalLearnerParam(id = "sample.weights", default = FALSE, tunable = FALSE),
       makeLogicalLearnerParam(id = "stoptreeOut", default = FALSE, tunable = FALSE),
       makeNumericLearnerParam(id = "smoothness", default = 200, lower = 20),
-      makeNumericLearnerParam(id = "iqrfac", default = 1.5),
-      makeNumericLearnerParam(id = "conv.treshold.reg", default = 1),
       makeNumericLearnerParam(id = "conv.treshold.clas", default = 0.001)
     ),
     properties = c("twoclass", "multiclass", "numerics", "factors", "prob"),
@@ -487,40 +379,4 @@ predictLearner.classif.brf = function(.learner, .model, .newdata, ...) {
     p = predict.brf(.model$learner.model, data = .newdata, prob = TRUE)
   }
   return(p)
-}
-
-makeRLearner.regr.brf = function() {
-  makeRLearnerRegr(
-    cl = "regr.brf",
-    package = "MASS",
-    par.set = makeParamSet(
-      makeNumericLearnerParam(id = "forest.size", lower = 20, default = 500),
-      #makeNumericLearnerParam(id = "init.weights", default = FALSE),
-      makeNumericLearnerParam(id = "weight.treshold", default = 20, lower = 20),
-      makeLogicalLearnerParam(id = "leaf.weights", default = FALSE, tunable = FALSE),
-      makeLogicalLearnerParam(id = "converge", default = FALSE, tunable = FALSE),
-      makeLogicalLearnerParam(id = "sample.weights", default = TRUE, tunable = FALSE),
-      makeLogicalLearnerParam(id = "stoptreeOut", default = FALSE, tunable = FALSE),
-      makeNumericLearnerParam(id = "smoothness", default = 30, lower = 20),
-      makeNumericLearnerParam(id = "iqrfac", default = 1.5),
-      makeNumericLearnerParam(id = "conv.treshold.reg", default = 1),
-      makeNumericLearnerParam(id = "conv.treshold.clas", default = 0.01)
-    ),
-    properties = c("numerics", "factors"),
-    name = "Boosted Random Forest",
-    short.name = "brf",
-    note = ""
-  )
-}
-
-trainLearner.regr.brf = function(.learner, .task, .subset, .weights = NULL, ...) {
-  f = getTaskTargetNames(.task)
-  data = getTaskData(.task, subset = .subset)
-  TY = data[, f]
-  TX = data[,colnames(data) != f, drop = FALSE]
-  brf(TY = TY, TX = TX, ...)
-}
-
-predictLearner.regr.brf = function(.learner, .model, .newdata, ...) {
-  predict.brf(.model$learner.model, data = .newdata, prob = FALSE)
 }
