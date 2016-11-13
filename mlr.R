@@ -8,9 +8,9 @@ makeRLearner.classif.brf = function() {
       makeNumericLearnerParam(id = "forest.size", lower = 20, default = 300),
       #makeNumericLearnerParam(id = "init.weights", default = FALSE),
       makeNumericLearnerParam(id = "weight.treshold", default = 20, lower = 20),
-      makeLogicalLearnerParam(id = "leaf.weights", default = FALSE, tunable = FALSE),
+      makeLogicalLearnerParam(id = "leaf.weights", default = TRUE, tunable = FALSE),
       makeLogicalLearnerParam(id = "converge", default = TRUE, tunable = FALSE),
-      makeLogicalLearnerParam(id = "sample.weights", default = TRUE, tunable = FALSE),
+      makeLogicalLearnerParam(id = "sample.weights", default = FALSE, tunable = FALSE),
       makeLogicalLearnerParam(id = "stoptreeOut", default = FALSE, tunable = FALSE),
       makeNumericLearnerParam(id = "smoothness", default = 200, lower = 20),
       makeNumericLearnerParam(id = "conv.treshold.clas", default = 0.001)
