@@ -33,9 +33,9 @@ trainLearner.classif.brf = function(.learner, .task, .subset, .weights = NULL, .
 
 predictLearner.classif.brf = function(.learner, .model, .newdata, ...) {
   if (.learner$predict.type == "response") {
-    p = predict.brf(.model$learner.model, data = .newdata, prob = FALSE) }
+    p = predict(.model$learner.model, data = .newdata, prob = FALSE) }
   else {
-    p = predict.brf(.model$learner.model, data = .newdata, prob = TRUE)
+    p = predict(.model$learner.model, data = .newdata, prob = TRUE)
   }
   return(p)
 }
@@ -43,11 +43,17 @@ predictLearner.classif.brf = function(.learner, .model, .newdata, ...) {
 
 data(iris)
 
+# General test
+system.time(test <- brf(TY = iris$Species, TX = iris[,-5], smoothness = 200, conv.threshold.clas = 0.001))
+str(test, 1)
+pred.test <- predict(test, iris, prob = F)
+
+# mlr test
 # Iris Task
 ## Define the task
 task = makeClassifTask(id = "tutorial", data = iris, target = "Species")
 ## Define the learner
-lrn = makeLearner("classif.brf")
+lrn = makeLearner("classif.brf", predict.type = "prob")
 ## Define the resampling strategy
 rdesc = makeResampleDesc(method = "CV", stratify = TRUE)
 trn = train(lrn, task)

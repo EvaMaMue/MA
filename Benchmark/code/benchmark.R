@@ -36,7 +36,7 @@ addAlgorithm("eval", fun = function(job, data, instance,  ...) {
     learners = list(makeLearner("regr.randomForestSRC", par.vals = list(ntree = 5000)), makeLearner("regr.brf"))
   }
   measures = MEASURES(type)
-  rdesc = makeResampleDesc("RepCV", folds = 2, reps = 2, stratify = FALSE)
+  rdesc = makeResampleDesc("RepCV", folds = 10, reps = 10, stratify = FALSE)
   configureMlr(on.learner.error = "warn", show.learner.output = FALSE)
   bmr = benchmark(learners, task, rdesc, measures, keep.pred = FALSE, models = FALSE, show.info = TRUE)
   bmr

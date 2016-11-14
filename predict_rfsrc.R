@@ -2,7 +2,6 @@ predict.brf <- function(object, data, prob = FALSE){
   if(class(object)!="brf"){
     stop("object needs to be of class brf")
   }
-  
   predictions.matrix <- vector(mode="numeric")
   
   if (object$type == "classification") {
@@ -19,7 +18,6 @@ predict.brf <- function(object, data, prob = FALSE){
     if(!prob){
       predictions <- object$lev.names[as.numeric(apply(predictions.matrix, 1, function(x) names(which.max(table(x)))))]
       predictions <- factor(predictions, levels = object$lev.names)
-      
       return(predictions)
     }
     

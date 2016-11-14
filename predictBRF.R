@@ -10,7 +10,6 @@ brf.predict <- function(object, data, prob = FALSE){
     vote.matrix <- matrix(data = 0, nrow = dim(data)[1], ncol = object$num.levels)
   }
   
-  
   for(t in 1:(object$num.trees)){
     predictions.matrix <- cbind(predictions.matrix, predict(object$forest[[t]], data)$prediction)
     if(object$leaf.weights){
